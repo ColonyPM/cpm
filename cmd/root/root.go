@@ -5,17 +5,31 @@ import (
 
 	deploycmd "github.com/ColonyPM/cpm/cmd/deploy"
 	pkgcmd "github.com/ColonyPM/cpm/cmd/pkg"
+	store "github.com/ColonyPM/cpm/internal/db"
+	"github.com/ColonyPM/cpm/internal/storectx"
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "cpm-cli",
 	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
+	Long:  ``,
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if storectx.IsInitialized(cmd) {
+			return nil
+		}
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+		ctx := cmd.Context()
+
+		dbConn, err := store.OpenLocal(ctx)
+		if err != nil {
+			return err
+		}
+		q := store.New(dbConn)
+
+		storectx.AttachToRoot(cmd.Root(), dbConn, q)
+
+		return nil
+	},
 }
 
 func Execute() error {
@@ -23,8 +37,6 @@ func Execute() error {
 }
 
 func init() {
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-
 	rootCmd.AddCommand(pkgcmd.NewPkgCmd())
 	rootCmd.AddCommand(deploycmd.NewDeployCmd())
 }
