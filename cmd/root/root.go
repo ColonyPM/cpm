@@ -25,6 +25,8 @@ func Execute() error {
 func init() {
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 
+	rootCmd.SilenceUsage = true
+
 	rootCmd.AddCommand(pkgcmd.NewPkgCmd())
 	rootCmd.AddCommand(deploycmd.NewDeployCmd())
 }
