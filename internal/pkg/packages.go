@@ -6,23 +6,24 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type Executor struct {
+type ExecutorSpec struct {
 	Name  string `yaml:"name"`
-	Image string `yaml:"image"`
+	Image string `yaml:"img"`
 }
 
 type DeploymentConfig struct {
-	FuncSpecs []string   `yaml:"funcSpecs"`
-	Workflows []string   `yaml:"workflows"`
-	Executors []Executor `yaml:"executors"`
+	FuncSpecs []string       `yaml:"funcSpecs"`
+	Workflows []string       `yaml:"workflows"`
+	Executors []ExecutorSpec `yaml:"executors"`
 }
 
 type Manifest struct {
 	Name        string           `yaml:"name"`
 	Version     string           `yaml:"version"`
 	Description string           `yaml:"description"`
+	Author      string           `yaml:"author"`
 	Deprecated  bool             `yaml:"deprecated"`
-	Deployments DeploymentConfig `yaml:"deployments"`
+	Deployments DeploymentConfig `yaml:"deploy"`
 }
 
 func ReadManifest(r io.Reader) (*Manifest, error) {
@@ -35,7 +36,7 @@ func ReadManifest(r io.Reader) (*Manifest, error) {
 	return &manifest, nil
 }
 
-func WriteManifest(w io.Writer, manifest *Manifest) error {
+func WriteManifest(w io.Writer, manifest Manifest) error {
 	enc := yaml.NewEncoder(w)
 	defer enc.Close()
 	return enc.Encode(manifest)
@@ -46,11 +47,12 @@ func NewDefaultManifest(pkgName string) Manifest {
 		Name:        pkgName,
 		Version:     "0.0.1",
 		Description: "A package",
+		Author:      "Your Name",
 		Deprecated:  false,
 		Deployments: DeploymentConfig{
 			FuncSpecs: []string{},
 			Workflows: []string{},
-			Executors: []Executor{},
+			Executors: []ExecutorSpec{},
 		},
 	}
 }
