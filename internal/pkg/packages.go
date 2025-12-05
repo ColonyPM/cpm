@@ -1,7 +1,14 @@
 package pkg
 
 import (
+	"fmt"
 	"io"
+	"os"
+	"runtime"
+
+	"gopkg.in/yaml.v3"
+
+	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
@@ -55,4 +62,53 @@ func NewDefaultManifest(pkgName string) Manifest {
 			Executors: []ExecutorSpec{},
 		},
 	}
+}
+
+func GetOrMakePackagesDirectory() (string, error) {
+	var dir string
+
+	switch runtime.GOOS {
+	case "windows":
+		base := os.Getenv("LOCALAPPDATA")
+		if base == "" {
+			base = os.Getenv("APPDATA")
+		}
+		if base == "" {
+			return "", fmt.Errorf("LOCALAPPDATA/APPDATA not set")
+		}
+		dir = filepath.Join(base, "cpm", "packages")
+
+	case "darwin":
+		// Prefer XDG if the user explicitly set it
+		base := os.Getenv("XDG_DATA_HOME")
+		if base == "" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return "", fmt.Errorf("cannot determine home directory: %w", err)
+			}
+			// Standard macOS convention
+			base = filepath.Join(home, "Library", "Application Support")
+		}
+		dir = filepath.Join(base, "cpm", "packages")
+
+	case "linux", "freebsd", "openbsd", "netbsd", "dragonfly", "solaris":
+		dataHome := os.Getenv("XDG_DATA_HOME")
+		if dataHome == "" {
+			home := os.Getenv("HOME")
+			if home == "" {
+				return "", fmt.Errorf("XDG_DATA_HOME and HOME not set")
+			}
+			dataHome = filepath.Join(home, ".local", "share")
+		}
+		dir = filepath.Join(dataHome, "cpm", "packages")
+
+	default:
+		return "", fmt.Errorf("unsupported OS: %s", runtime.GOOS)
+	}
+
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", fmt.Errorf("creating packages directory %q: %w", dir, err)
+	}
+
+	return dir, nil
 }
