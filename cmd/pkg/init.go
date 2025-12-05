@@ -20,7 +20,7 @@ func createManifest(pkgPath string) error {
 	}
 	defer f.Close()
 
-	if err := pkg.WriteManifest(f, pkg.NewDefaultManifest("package.yaml")); err != nil {
+	if err := pkg.WriteManifest(f, pkg.NewDefaultManifest(filepath.Base(pkgPath))); err != nil {
 		return fmt.Errorf("writing package manifest: %w", err)
 	}
 
