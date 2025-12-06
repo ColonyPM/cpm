@@ -1,37 +1,96 @@
 package pkgcmd
 
 import (
+	"bytes"
+	"context"
+	"errors"
 	"fmt"
-	"net/http"
+	"io"
 	"os"
 	"path/filepath"
+	"time"
 
+	"github.com/ColonyPM/cpm/internal/pkg"
+	"github.com/briandowns/spinner"
 	"github.com/go-resty/resty/v2"
+	"github.com/mholt/archives"
 	"github.com/spf13/cobra"
 )
 
 // /api/packages/{name}/download
-const baseURL = "https://colonypm.xyz/api"
+const baseURL = "https://colonypm.xyz/api/"
+
+type DownloadError struct {
+	Detail string `json:"detail"`
+}
 
 func installPackage(cmd *cobra.Command, args []string) error {
+	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+	s.Prefix = fmt.Sprintf("Downloading %s ", args[0])
+	s.Start()
+
 	client := resty.New()
 	resp, err := client.R().
-		Get(filepath.Join(baseURL, args[0], "download"))
+		SetError(&DownloadError{}).
+		Get(baseURL + "packages/" + args[0] + "/download")
 	if err != nil {
 		return err
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return fmt.Errorf("download failed: %s", resp.Status())
+	if resp.IsError() {
+		return errors.New(resp.Error().(*DownloadError).Detail)
 	}
 
-	// Save to file
-	err = os.WriteFile("my-dir.tar.gz", resp.Body(), 0o644)
+	pkgsDir, err := pkg.GetOrMakePackagesDirectory()
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("Downloaded archive to my-dir.tar.gz")
+	format := archives.CompressedArchive{
+		Compression: archives.Gz{},
+		Extraction:  archives.Tar{},
+	}
+
+	err = format.Extract(cmd.Context(), bytes.NewReader(resp.Body()), func(ctx context.Context, f archives.FileInfo) error {
+		info, err := f.Stat()
+		if err != nil {
+			return err
+		}
+
+		name := f.NameInArchive
+		targetPath := filepath.Join(pkgsDir, name)
+
+		if info.IsDir() {
+			return os.MkdirAll(targetPath, 0o755)
+		}
+
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+			return err
+		}
+
+		src, err := f.Open()
+		if err != nil {
+			return err
+		}
+		defer src.Close()
+
+		dst, err := os.Create(targetPath)
+		if err != nil {
+			return err
+		}
+		defer dst.Close()
+
+		_, err = io.Copy(dst, src)
+		return err
+	})
+
+	if err != nil {
+		s.Stop()
+		return err
+	}
+
+	s.Stop()
+	fmt.Printf("Downloaded %s\n", args[0])
 
 	return nil
 }
