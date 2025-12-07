@@ -1,32 +1,50 @@
-package root
+package cmd
 
 import (
-	"github.com/spf13/cobra"
+	"os"
+	"strconv"
 
 	deploycmd "github.com/ColonyPM/cpm/cmd/deploy"
 	pkgcmd "github.com/ColonyPM/cpm/cmd/pkg"
 	store "github.com/ColonyPM/cpm/internal/db"
 	"github.com/ColonyPM/cpm/internal/storectx"
+	"github.com/colonyos/colonies/pkg/client"
+	"github.com/spf13/cobra"
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "cpm-cli",
+	Use:   "cpm",
 	Short: "A brief description of your application",
 	Long:  ``,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		if storectx.IsInitialized(cmd) {
+		// Decide whether you want to use the root ctx or the command ctx as the base
+		root := cmd.Root()
+		ctx := root.Context()
+
+		if storectx.IsInitialized(ctx) {
 			return nil
 		}
 
-		ctx := cmd.Context()
-
+		// Use this ctx for db init as well
 		dbConn, err := store.OpenLocal(ctx)
 		if err != nil {
 			return err
 		}
 		q := store.New(dbConn)
 
-		storectx.AttachToRoot(cmd.Root(), dbConn, q)
+		// build Colonies client
+		host := os.Getenv("COLONIES_SERVER_HOST")
+		portStr := os.Getenv("COLONIES_SERVER_PORT")
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			return err
+		}
+
+		cc := client.CreateColoniesClient(host, port, true, false)
+
+		// attach to ctx and set it back on the root
+		ctx = storectx.WithStore(ctx, dbConn, q, cc)
+		root.SetContext(ctx)
 
 		return nil
 	},

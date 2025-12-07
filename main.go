@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"github.com/ColonyPM/cpm/cmd/root"
+	root "github.com/ColonyPM/cpm/cmd/root"
 )
 
 func main() {

@@ -4,12 +4,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime"
 
-	"gopkg.in/yaml.v3"
-
-	"path/filepath"
-
+	"github.com/colonyos/colonies/pkg/core"
 	"gopkg.in/yaml.v3"
 )
 
@@ -19,9 +17,11 @@ type ExecutorSpec struct {
 }
 
 type DeploymentConfig struct {
-	FuncSpecs []string       `yaml:"funcSpecs"`
+	FuncSpecs []string       `yaml:"functionSpecs"`
 	Workflows []string       `yaml:"workflows"`
 	Executors []ExecutorSpec `yaml:"executors"`
+	Setup     []string       `yaml:"setup"`
+	Teardown  []string       `yaml:"teardown"`
 }
 
 type Manifest struct {
@@ -111,4 +111,97 @@ func GetOrMakePackagesDirectory() (string, error) {
 	}
 
 	return dir, nil
+}
+
+func GetPackageManifest(pkgName string) (*Manifest, error) {
+	pkgsDir, err := GetOrMakePackagesDirectory()
+	if err != nil {
+		return nil, err
+	}
+
+	pkgDir := filepath.Join(pkgsDir, pkgName)
+
+	info, err := os.Stat(pkgDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("package %q not installed (missing dir %s)", pkgName, pkgDir)
+		}
+		return nil, fmt.Errorf("stat package dir %q: %w", pkgDir, err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("package path %q is not a directory", pkgDir)
+	}
+
+	manifestPath := filepath.Join(pkgDir, "package.yaml")
+
+	f, err := os.Open(manifestPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("manifest %q not found for package %q", manifestPath, pkgName)
+		}
+		return nil, fmt.Errorf("opening manifest %q: %w", manifestPath, err)
+	}
+	defer f.Close()
+
+	m, err := ReadManifest(f)
+	if err != nil {
+		return nil, fmt.Errorf("parsing manifest %q: %w", manifestPath, err)
+	}
+
+	return m, nil
+}
+
+func GetFunctionSpec(pkgName, fnSpecName string) (*core.FunctionSpec, error) {
+	pkgsDir, err := GetOrMakePackagesDirectory()
+	if err != nil {
+		return nil, err
+	}
+
+	pkgDir := filepath.Join(pkgsDir, pkgName)
+
+	info, err := os.Stat(pkgDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("package %q not installed (missing dir %s)", pkgName, pkgDir)
+		}
+		return nil, fmt.Errorf("stat package dir %q: %w", pkgDir, err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("package path %q is not a directory", pkgDir)
+	}
+
+	templatesDir := filepath.Join(pkgDir, "templates")
+	tInfo, err := os.Stat(templatesDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("templates dir %q not found for package %q", templatesDir, pkgName)
+		}
+		return nil, fmt.Errorf("stat templates dir %q: %w", templatesDir, err)
+	}
+	if !tInfo.IsDir() {
+		return nil, fmt.Errorf("templates path %q is not a directory", templatesDir)
+	}
+
+	// Allow "fn" or "fn.json"
+	fileName := fnSpecName
+	if filepath.Ext(fileName) == "" {
+		fileName += ".json"
+	}
+
+	specPath := filepath.Join(templatesDir, fileName)
+
+	data, err := os.ReadFile(specPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("function spec %q not found in %q", fileName, templatesDir)
+		}
+		return nil, fmt.Errorf("reading function spec %q: %w", specPath, err)
+	}
+
+	fs, err := core.ConvertJSONToFunctionSpec(string(data))
+	if err != nil {
+		return nil, fmt.Errorf("parsing function spec %q: %w", specPath, err)
+	}
+
+	return fs, nil
 }
