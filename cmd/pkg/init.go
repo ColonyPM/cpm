@@ -30,21 +30,24 @@ func createManifest(pkgPath string) error {
 func initPackage(cmd *cobra.Command, args []string) error {
 
 	// Create directories
-	pkgPath := args[0]
+	var pkgPath string
 	// If arg is empty create package in current directory
 	if len(args) == 0 {
 		cwd, err := os.Getwd()
 		if err != nil {
 			return fmt.Errorf("failed to get cwd: %v", err)
 		}
-		pkgPath = filepath.Base(cwd)
+		pkgPath = cwd
+	}else {
+		pkgPath = args[0]
+		// Package directory
+		err := os.MkdirAll(pkgPath, 0o755)
+		if err != nil {
+			return fmt.Errorf("creating package directory: %w", err)
+		}
 	}
-	// Package directory
-	err := os.MkdirAll(pkgPath, 0o755)
-	if err != nil {
-		return fmt.Errorf("creating package directory: %w", err)
-	}
-	err = os.Mkdir(filepath.Join(pkgPath, "templates"), 0o755)
+	
+	err := os.Mkdir(filepath.Join(pkgPath, "templates"), 0o755)
 	if err != nil {
 		return fmt.Errorf("creating package templates directory: %w", err)
 	}
