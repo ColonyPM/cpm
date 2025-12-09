@@ -8,24 +8,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func listPackages(cmd *cobra.Command, args []string) {
+func listPackages(cmd *cobra.Command, args []string) error {
 	packagesPath, err := pkg.GetOrMakePackagesDirectory()
 	if err != nil {
-		fmt.Printf("Error getting packages directory: %v\n", err)
-		return
+		return fmt.Errorf("getting packages directory: %v\n", err)
 	}
 
 	fmt.Println("Installed packages:")
 
 	entries, err := os.ReadDir(packagesPath)
 	if err != nil {
-		fmt.Printf("Error reading packages directory: %v\n", err)
-		return
+		return fmt.Errorf("reading packages directory: %v\n", err)
 	}
 
 	for _, entry := range entries {
 		fmt.Println("    - " + entry.Name())
 	}
+	return nil
 }
 
 func newPkgListCmd() *cobra.Command {
@@ -33,6 +32,6 @@ func newPkgListCmd() *cobra.Command {
 		Use:     "list",
 		Aliases: []string{"ls"},
 		Short:   "List locally installedpackages",
-		Run:     listPackages,
+		RunE:    listPackages,
 	}
 }
