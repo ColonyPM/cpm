@@ -1,11 +1,9 @@
 package cmd
 
 import (
-	"os"
-	"strconv"
-
 	deploycmd "github.com/ColonyPM/cpm/cmd/deploy"
 	pkgcmd "github.com/ColonyPM/cpm/cmd/pkg"
+	"github.com/ColonyPM/cpm/internal/config"
 	store "github.com/ColonyPM/cpm/internal/db"
 	"github.com/ColonyPM/cpm/internal/storectx"
 	"github.com/colonyos/colonies/pkg/client"
@@ -25,6 +23,12 @@ var rootCmd = &cobra.Command{
 			return nil
 		}
 
+		// Load config
+		cfg, err := config.Load()
+		if err != nil {
+			return err
+		}
+
 		// Use this ctx for db init as well
 		dbConn, err := store.OpenLocal(ctx)
 		if err != nil {
@@ -32,18 +36,13 @@ var rootCmd = &cobra.Command{
 		}
 		q := store.New(dbConn)
 
-		// build Colonies client
-		host := os.Getenv("COLONIES_SERVER_HOST")
-		portStr := os.Getenv("COLONIES_SERVER_PORT")
-		port, err := strconv.Atoi(portStr)
-		if err != nil {
-			return err
-		}
-
-		cc := client.CreateColoniesClient(host, port, true, false)
+		// build Colonies client from config
+		// Note: Colonies client uses "insecure" flag (true = HTTP, false = HTTPS)
+		// Our config uses "tls" flag (true = HTTPS, false = HTTP), so we invert it
+		cc := client.CreateColoniesClient(cfg.Colonies.Host, cfg.Colonies.Port, !cfg.Colonies.TLS, false)
 
 		// attach to ctx and set it back on the root
-		ctx = storectx.WithStore(ctx, dbConn, q, cc)
+		ctx = storectx.WithStore(ctx, dbConn, q, cc, cfg)
 		root.SetContext(ctx)
 
 		return nil

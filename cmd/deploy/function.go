@@ -49,25 +49,25 @@ func follow(client *client.ColoniesClient, env map[string]string, process *core.
 }
 
 func deployFunction(cmd *cobra.Command, args []string) error {
-	cc := storectx.GetColoniesClient(cmd.Root().Context())
+	ctx := cmd.Root().Context()
+	cc := storectx.GetColoniesClient(ctx)
+	cfg := storectx.GetConfig(ctx)
 
 	fnSpec, err := pkg.GetFunctionSpec(args[0], args[1])
 	if err != nil {
 		return err
 	}
 
-	// TODO: Move to storectx
-	env, err := LoadEnvMap(envKeys)
-	if err != nil {
-		return err
-	}
-
-	proc, err := cc.Submit(fnSpec, env["COLONIES_PRVKEY"])
+	proc, err := cc.Submit(fnSpec, cfg.Colonies.Prvkey)
 	if err != nil {
 		return err
 	}
 
 	if Follow {
+		env := map[string]string{
+			"COLONIES_COLONY_NAME": cfg.Colonies.ColonyName,
+			"COLONIES_PRVKEY":      cfg.Colonies.Prvkey,
+		}
 		follow(cc, env, proc)
 	}
 

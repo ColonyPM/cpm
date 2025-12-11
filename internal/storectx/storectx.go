@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/ColonyPM/cpm/internal/config"
 	store "github.com/ColonyPM/cpm/internal/db"
 	colonies "github.com/colonyos/colonies/pkg/client"
 )
@@ -15,12 +16,14 @@ const (
 	dbKey       ctxKey = "db"
 	qKey        ctxKey = "queries"
 	coloniesKey ctxKey = "coloniesClient"
+	configKey   ctxKey = "config"
 )
 
-// WithStore attaches db, queries, and colonies client to a context and returns the new context.
-func WithStore(ctx context.Context, db *sql.DB, q *store.Queries, cc *colonies.ColoniesClient) context.Context {
+// WithStore attaches db, queries, colonies client, and config to a context and returns the new context.
+func WithStore(ctx context.Context, db *sql.DB, q *store.Queries, cc *colonies.ColoniesClient, cfg *config.Config) context.Context {
 	ctx = context.WithValue(ctx, dbKey, db)
 	ctx = context.WithValue(ctx, qKey, q)
+	ctx = context.WithValue(ctx, configKey, cfg)
 	if cc != nil {
 		ctx = context.WithValue(ctx, coloniesKey, cc)
 	}
@@ -47,4 +50,12 @@ func GetColoniesClient(ctx context.Context) *colonies.ColoniesClient {
 func IsInitialized(ctx context.Context) bool {
 	_, ok := ctx.Value(dbKey).(*sql.DB)
 	return ok
+}
+
+func GetConfig(ctx context.Context) *config.Config {
+	cfg, _ := ctx.Value(configKey).(*config.Config)
+	if cfg == nil {
+		panic("storectx: Config not initialized on context")
+	}
+	return cfg
 }
