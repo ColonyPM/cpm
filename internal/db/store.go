@@ -6,24 +6,71 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	_ "modernc.org/sqlite"
 )
 
-// dbPath returns ./cpm.db relative to current working directory.
-func dbPath() (string, error) {
-	wd, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("working dir: %w", err)
+// dataDir returns the XDG data directory for cpm.
+func dataDir() (string, error) {
+	var dir string
+
+	switch runtime.GOOS {
+	case "windows":
+		base := os.Getenv("LOCALAPPDATA")
+		if base == "" {
+			base = os.Getenv("APPDATA")
+		}
+		if base == "" {
+			return "", fmt.Errorf("LOCALAPPDATA/APPDATA not set")
+		}
+		dir = filepath.Join(base, "cpm")
+
+	case "darwin":
+		base := os.Getenv("XDG_DATA_HOME")
+		if base == "" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return "", fmt.Errorf("cannot determine home directory: %w", err)
+			}
+			base = filepath.Join(home, "Library", "Application Support")
+		}
+		dir = filepath.Join(base, "cpm")
+
+	default: // linux, freebsd, etc.
+		dataHome := os.Getenv("XDG_DATA_HOME")
+		if dataHome == "" {
+			home := os.Getenv("HOME")
+			if home == "" {
+				return "", fmt.Errorf("XDG_DATA_HOME and HOME not set")
+			}
+			dataHome = filepath.Join(home, ".local", "share")
+		}
+		dir = filepath.Join(dataHome, "cpm")
 	}
-	return filepath.Join(wd, "cpm.db"), nil
+
+	return dir, nil
 }
 
-// OpenLocal opens (and initializes, if needed) the SQLite database in the project directory.
+// dbPath returns the path to cpm.db in the XDG data directory.
+func dbPath() (string, error) {
+	dir, err := dataDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "cpm.db"), nil
+}
+
+// OpenLocal opens (and initializes, if needed) the SQLite database in the XDG data directory.
 func OpenLocal(ctx context.Context) (*sql.DB, error) {
 	path, err := dbPath()
 	if err != nil {
 		return nil, err
+	}
+
+	// Ensure the directory exists
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, fmt.Errorf("creating data directory: %w", err)
 	}
 
 	needsInit := false
