@@ -113,10 +113,10 @@ func GetOrMakePackagesDirectory() (string, error) {
 	return dir, nil
 }
 
-func GetPackageManifest(pkgName string) (*Manifest, error) {
+func GetPackageDirectory(pkgName string) (string, error) {
 	pkgsDir, err := GetOrMakePackagesDirectory()
 	if err != nil {
-		return nil, err
+		return "", fmt.Errorf("packages directory: %w", err)
 	}
 
 	pkgDir := filepath.Join(pkgsDir, pkgName)
@@ -124,12 +124,21 @@ func GetPackageManifest(pkgName string) (*Manifest, error) {
 	info, err := os.Stat(pkgDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("package %q not installed (missing dir %s)", pkgName, pkgDir)
+			return "", fmt.Errorf("package %q does not exist", pkgName)
 		}
-		return nil, fmt.Errorf("stat package dir %q: %w", pkgDir, err)
+		return "", fmt.Errorf("stat package dir %q: %w", pkgDir, err)
 	}
 	if !info.IsDir() {
-		return nil, fmt.Errorf("package path %q is not a directory", pkgDir)
+		return "", fmt.Errorf("package path %q is not a directory", pkgDir)
+	}
+
+	return pkgDir, nil
+}
+
+func GetPackageManifest(pkgName string) (*Manifest, error) {
+	pkgDir, err := GetPackageDirectory(pkgName)
+	if err != nil {
+		return nil, err
 	}
 
 	manifestPath := filepath.Join(pkgDir, "package.yaml")
