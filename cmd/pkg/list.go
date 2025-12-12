@@ -31,7 +31,7 @@ func newPkgListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "list",
 		Aliases: []string{"ls"},
-		Short:   "List locally installedpackages",
+		Short:   "List locally installed packages",
 		RunE:    listPackages,
 	}
 }
