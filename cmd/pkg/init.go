@@ -5,25 +5,54 @@ import (
 	"os"
 	"path/filepath"
 
+	"io"
+
 	"github.com/ColonyPM/cpm/internal/pkg"
 	"github.com/spf13/cobra"
 )
 
-func createManifest(pkgPath string) error {
-
-	// Manifest file
-	path := filepath.Join(pkgPath, "package.yaml")
+func createFile(pkgPath string, fileName string) error {
+	path := filepath.Join(pkgPath, fileName)
 
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
-		return fmt.Errorf("error creating package.yaml: %w", err)
+		return fmt.Errorf("error creating %s: %w", fileName, err)
 	}
 	defer f.Close()
 
-	if err := pkg.WriteManifest(f, pkg.NewDefaultManifest(filepath.Base(pkgPath))); err != nil {
-		return fmt.Errorf("writing package manifest: %w", err)
+	pkgName := filepath.Base(pkgPath)
+
+	var write func() error
+
+	switch fileName {
+	case "manifest.yaml":
+		write = func() error {
+			return pkg.WriteManifest(f, pkg.NewDefaultManifest(pkgName))
+		}
+
+	case "README.md":
+		write = func() error {
+			if _, err := fmt.Fprintf(f, "# %s\n", pkgName); err != nil {
+				return fmt.Errorf("error writing README: %w", err)
+			}
+			return nil
+		}
+
+	case "values.yaml":
+		write = func() error {
+			if _, err := io.WriteString(f, "global:\n"); err != nil {
+				return fmt.Errorf("error writing to values.yaml: %w", err)
+			}
+			return nil
+		}
+
+	default:
+		return fmt.Errorf("unknown file: %s", fileName)
 	}
 
+	if err := write(); err != nil {
+		return fmt.Errorf("writing %s: %w", fileName, err)
+	}
 	return nil
 }
 
@@ -38,7 +67,7 @@ func initPackage(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to get cwd: %v", err)
 		}
 		pkgPath = cwd
-	}else {
+	} else {
 		pkgPath = args[0]
 		// Package directory
 		err := os.MkdirAll(pkgPath, 0o755)
@@ -46,30 +75,21 @@ func initPackage(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("creating package directory: %w", err)
 		}
 	}
-	
+
 	err := os.Mkdir(filepath.Join(pkgPath, "templates"), 0o755)
 	if err != nil {
 		return fmt.Errorf("creating package templates directory: %w", err)
 	}
 
-	// Create manifest file
-	err = createManifest(pkgPath)
-	if err != nil {
-		return fmt.Errorf("creating package manifest: %w", err)
+	// Create manifest.yaml, README.md, values.yaml
+	files := []string{"manifest.yaml", "README.md", "values.yaml"}
+
+	for _, name := range files {
+		if err := createFile(pkgPath, name); err != nil {
+			return err
+		}
 	}
 
-	// Create values.yaml file
-	valuesPath := filepath.Join(pkgPath, "values.yaml")
-	f, err := os.OpenFile(valuesPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
-	if err != nil {
-		return fmt.Errorf("error creating values.yaml: %w", err)
-	}
-	defer f.Close()
-
-	_, err = f.WriteString("global:\n")
-	if err != nil {
-		return fmt.Errorf("error writing to values.yaml: %w", err)
-	}
 	return nil
 
 }
