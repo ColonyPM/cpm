@@ -166,3 +166,28 @@ func GetFunctionSpec(pkgName, fnSpecName string) (*core.FunctionSpec, error) {
 
 	return fs, nil
 }
+
+// In pkg/package.go (or similar)
+
+func GetValuesPath(pkgName string) (string, error) {
+	pkgDir, err := GetPackageDirectory(pkgName)
+	if err != nil {
+		return "", err
+	}
+
+	valuesPath := filepath.Join(pkgDir, "values.yaml")
+
+	info, err := os.Stat(valuesPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("values.yaml not found for package %q", pkgName)
+		}
+		return "", fmt.Errorf("stat values file %q: %w", valuesPath, err)
+	}
+
+	if info.IsDir() {
+		return "", fmt.Errorf("values path %q is a directory", valuesPath)
+	}
+
+	return valuesPath, nil
+}
