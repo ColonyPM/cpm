@@ -31,7 +31,6 @@ type uploadError struct {
 	Detail string `json:"detail"`
 }
 
-//var Token string
 
 func uploadPackage(cmd *cobra.Command, args []string) error {
 	
@@ -122,8 +121,6 @@ func newPkgUploadCmd() *cobra.Command {
 
 	cmd.Flags().StringP("token", "t", "", "upload token")
 	cmd.MarkFlagRequired("token")
-	// cmd.Flags().StringVarP(&Token, "token", "t", "", "upload token")
-	// cmd.MarkFlagRequired("token")
 
 	return cmd
 }
