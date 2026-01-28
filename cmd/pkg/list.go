@@ -27,7 +27,7 @@ func newPkgListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "list",
 		Aliases: []string{"ls"},
-		Short:   "List installed packages",
+		Short:   "list installed packages",
 		RunE:    listPackages,
 	}
 }
