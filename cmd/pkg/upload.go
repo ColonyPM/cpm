@@ -9,10 +9,9 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/mholt/archives"
 	"github.com/spf13/cobra"
-	"io"
 )
 
-const url = "https://colonypm.xyz/api/packages/upload"
+var url = "https://colonypm.xyz/api/packages/upload"
 
 
 
@@ -33,7 +32,6 @@ type uploadError struct {
 }
 
 
-
 func buildArchive(ctx context.Context, dir string) (*bytes.Buffer, error) {
     files, err := archives.FilesFromDisk(ctx, nil, map[string]string{dir: ""})
     if err != nil {
@@ -52,6 +50,27 @@ func buildArchive(ctx context.Context, dir string) (*bytes.Buffer, error) {
     return &buf, nil
 }
 
+func getPkgPath(args []string) (string, error) {
+	if len(args) == 0 {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "",fmt.Errorf("failed to get cwd: %w", err)
+		}
+		return cwd, nil
+	}
+	return args[0], nil
+}
+
+func validateDir(pkgPath string) error{
+	info, err := os.Stat(pkgPath)
+	if err != nil {
+	    return fmt.Errorf("stat %s: %w", pkgPath, err)
+	}
+	if !info.IsDir() {
+	    return fmt.Errorf("%s is not a directory", pkgPath)
+	}
+	return nil
+}
 
 func uploadPackage(cmd *cobra.Command, args []string) error {
 	
@@ -63,26 +82,17 @@ func uploadPackage(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("read token flag: %w", err)
 	}
 	
-	
 	var pkgPath string
 	// If arg is empty create package in current directory
-	if len(args) == 0 {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("failed to get cwd: %w", err)
-		}
-		pkgPath = cwd
-	} else {
-		pkgPath = args[0]
+	getPath, err := getPkgPath(args)
+	if err != nil {
+		return fmt.Errorf("resolve package path: %w", err)
 	}
+	pkgPath = getPath
 	
 	//Validate package path
-	info, err := os.Stat(pkgPath)
-	if err != nil {
-	    return fmt.Errorf("stat %s: %w", pkgPath, err)
-	}
-	if !info.IsDir() {
-	    return fmt.Errorf("%s is not a directory", pkgPath)
+	if err := validateDir(pkgPath); err != nil {
+		return fmt.Errorf("validate package path: %w", err)
 	}
 
 	// build archive
