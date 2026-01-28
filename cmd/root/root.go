@@ -1,10 +1,13 @@
 package cmd
 
 import (
+	"fmt"
+
 	deploycmd "github.com/ColonyPM/cpm/cmd/deploy"
 	pkgcmd "github.com/ColonyPM/cpm/cmd/pkg"
 	"github.com/ColonyPM/cpm/internal/config"
 	store "github.com/ColonyPM/cpm/internal/db"
+	"github.com/ColonyPM/cpm/internal/pkg"
 	"github.com/ColonyPM/cpm/internal/storectx"
 	"github.com/colonyos/colonies/pkg/client"
 	"github.com/spf13/cobra"
@@ -21,6 +24,11 @@ var rootCmd = &cobra.Command{
 
 		if storectx.IsInitialized(ctx) {
 			return nil
+		}
+
+		_, err := pkg.EnsurePackagesDir()
+		if err != nil {
+			return fmt.Errorf("initialization failed: %w", err)
 		}
 
 		// Load config

@@ -41,10 +41,7 @@ func installPackage(cmd *cobra.Command, args []string) error {
 		return errors.New(resp.Error().(*DownloadError).Detail)
 	}
 
-	pkgsDir, err := pkg.GetOrMakePackagesDirectory()
-	if err != nil {
-		return err
-	}
+	pkgsDir := pkg.GetPackagesDir()
 
 	format := archives.CompressedArchive{
 		Compression: archives.Gz{},

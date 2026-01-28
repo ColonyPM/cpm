@@ -9,14 +9,11 @@ import (
 )
 
 func listPackages(cmd *cobra.Command, args []string) error {
-	packagesPath, err := pkg.GetOrMakePackagesDirectory()
-	if err != nil {
-		return fmt.Errorf("getting packages directory: %v\n", err)
-	}
+	pkgsDir := pkg.GetPackagesDir()
 
 	fmt.Println("Installed packages:")
 
-	entries, err := os.ReadDir(packagesPath)
+	entries, err := os.ReadDir(pkgsDir)
 	if err != nil {
 		return fmt.Errorf("reading packages directory: %v\n", err)
 	}

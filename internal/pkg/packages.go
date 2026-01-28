@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 
 	"github.com/colonyos/colonies/pkg/core"
 	"gopkg.in/yaml.v3"
@@ -64,74 +63,36 @@ func NewDefaultManifest(pkgName string) Manifest {
 	}
 }
 
-func GetOrMakePackagesDirectory() (string, error) {
-	var dir string
-
-	switch runtime.GOOS {
-	case "windows":
-		base := os.Getenv("LOCALAPPDATA")
-		if base == "" {
-			base = os.Getenv("APPDATA")
-		}
-		if base == "" {
-			return "", fmt.Errorf("LOCALAPPDATA/APPDATA not set")
-		}
-		dir = filepath.Join(base, "cpm", "packages")
-
-	case "darwin":
-		// Prefer XDG if the user explicitly set it
-		base := os.Getenv("XDG_DATA_HOME")
-		if base == "" {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return "", fmt.Errorf("cannot determine home directory: %w", err)
-			}
-			// Standard macOS convention
-			base = filepath.Join(home, "Library", "Application Support")
-		}
-		dir = filepath.Join(base, "cpm", "packages")
-
-	case "linux", "freebsd", "openbsd", "netbsd", "dragonfly", "solaris":
-		dataHome := os.Getenv("XDG_DATA_HOME")
-		if dataHome == "" {
-			home := os.Getenv("HOME")
-			if home == "" {
-				return "", fmt.Errorf("XDG_DATA_HOME and HOME not set")
-			}
-			dataHome = filepath.Join(home, ".local", "share")
-		}
-		dir = filepath.Join(dataHome, "cpm", "packages")
-
-	default:
-		return "", fmt.Errorf("unsupported OS: %s", runtime.GOOS)
+func GetPackagesDir() string {
+	base, err := os.UserConfigDir()
+	if err != nil {
+		panic("GetPackagesDir: UserConfigDir returned an error; this environment is unsupported")
 	}
+	return filepath.Join(base, "cpm", "packages")
+}
 
+func EnsurePackagesDir() (string, error) {
+	dir := GetPackagesDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("creating packages directory %q: %w", dir, err)
 	}
-
 	return dir, nil
 }
 
 func GetPackageDirectory(pkgName string) (string, error) {
-	pkgsDir, err := GetOrMakePackagesDirectory()
-	if err != nil {
-		return "", fmt.Errorf("packages directory: %w", err)
-	}
-
+	pkgsDir := GetPackagesDir()
 	pkgDir := filepath.Join(pkgsDir, pkgName)
 
 	info, err := os.Stat(pkgDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return "", fmt.Errorf("package %q does not exist", pkgName)
+			return "", fmt.Errorf("package %q is not installed", pkgName)
 		}
-		return "", fmt.Errorf("stat package dir %q: %w", pkgDir, err)
+		return "", err
 	}
 	if !info.IsDir() {
-		return "", fmt.Errorf("package path %q is not a directory", pkgDir)
+		return "", fmt.Errorf("%q is not a directory", pkgDir)
 	}
-
 	return pkgDir, nil
 }
 
@@ -161,25 +122,16 @@ func GetPackageManifest(pkgName string) (*Manifest, error) {
 }
 
 func GetFunctionSpec(pkgName, fnSpecName string) (*core.FunctionSpec, error) {
-	pkgsDir, err := GetOrMakePackagesDirectory()
+	// Re-use our validated getter.
+	// This replaces your first 15 lines of stat/exist checks.
+	pkgDir, err := GetPackageDirectory(pkgName)
 	if err != nil {
 		return nil, err
 	}
 
-	pkgDir := filepath.Join(pkgsDir, pkgName)
-
-	info, err := os.Stat(pkgDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("package %q not installed (missing dir %s)", pkgName, pkgDir)
-		}
-		return nil, fmt.Errorf("stat package dir %q: %w", pkgDir, err)
-	}
-	if !info.IsDir() {
-		return nil, fmt.Errorf("package path %q is not a directory", pkgDir)
-	}
-
 	templatesDir := filepath.Join(pkgDir, "templates")
+
+	// Check templates dir
 	tInfo, err := os.Stat(templatesDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -191,7 +143,7 @@ func GetFunctionSpec(pkgName, fnSpecName string) (*core.FunctionSpec, error) {
 		return nil, fmt.Errorf("templates path %q is not a directory", templatesDir)
 	}
 
-	// Allow "fn" or "fn.json"
+	// Handle extension
 	fileName := fnSpecName
 	if filepath.Ext(fileName) == "" {
 		fileName += ".json"
