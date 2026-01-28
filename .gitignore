@@ -33,3 +33,6 @@ cpm.db
 # Editor/IDE
 # .idea/
 # .vscode/
+
+package.yaml
+values.yaml
