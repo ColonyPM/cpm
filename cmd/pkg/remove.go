@@ -16,7 +16,6 @@ var All bool
 var pkgPath string
 
 func removepkg(cmd *cobra.Command, args []string) error {
-	if 
 	pkgsDir := pkg.GetPackagesDir()
 	pkgsname, version, versionexist := strings.Cut(args[0], "@")
 
@@ -53,7 +52,7 @@ func newPkgRemoveCmd() *cobra.Command {
 	}
 	// Local flag: only applies to `serve`.
 	cmd.Flags().BoolVar(&All, "All", false, "remove ALL versions")
-	cmd.Flags().StringVar(&Dir, "Dir", "", "package directory")
+	//cmd.Flags().StringVar(&Dir, "Dir", "", "package directory")
 
 	return cmd
 }
