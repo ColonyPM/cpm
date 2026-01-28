@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"os"
 	"time"
-
+	"context"
 	"github.com/go-resty/resty/v2"
 	"github.com/mholt/archives"
 	"github.com/spf13/cobra"
+	"io"
 )
 
 const url = "https://colonypm.xyz/api/packages/upload"
@@ -32,7 +33,29 @@ type uploadError struct {
 }
 
 
+
+func buildArchive(ctx context.Context, dir string) (*bytes.Buffer, error) {
+    files, err := archives.FilesFromDisk(ctx, nil, map[string]string{dir: ""})
+    if err != nil {
+        return nil, fmt.Errorf("collect files: %w", err)
+    }
+
+    format := archives.CompressedArchive{
+        Compression: archives.Gz{},
+        Archival:    archives.Tar{},
+    }
+
+    var buf bytes.Buffer
+    if err := format.Archive(ctx, &buf, files); err != nil {
+        return nil, fmt.Errorf("create archive: %w", err)
+    }
+    return &buf, nil
+}
+
+
 func uploadPackage(cmd *cobra.Command, args []string) error {
+	
+	ctx := cmd.Context()
 	
 	//Handle token
 	token, err := cmd.Flags().GetString("token")
@@ -53,7 +76,7 @@ func uploadPackage(cmd *cobra.Command, args []string) error {
 		pkgPath = args[0]
 	}
 	
-	//Handle pkgpath errors
+	//Validate package path
 	info, err := os.Stat(pkgPath)
 	if err != nil {
 	    return fmt.Errorf("stat %s: %w", pkgPath, err)
@@ -62,23 +85,10 @@ func uploadPackage(cmd *cobra.Command, args []string) error {
 	    return fmt.Errorf("%s is not a directory", pkgPath)
 	}
 
-
-	files, err := archives.FilesFromDisk(cmd.Context(), nil, map[string]string{
-		pkgPath: "",
-	})
+	// build archive
+	buf, err := buildArchive(ctx, pkgPath)
 	if err != nil {
-		return err
-	}
-
-	format := archives.CompressedArchive{
-		Compression: archives.Gz{},
-		Archival:    archives.Tar{},
-	}
-
-	var archiveBytes bytes.Buffer
-
-	if err := format.Archive(cmd.Context(), &archiveBytes, files); err != nil {
-		return fmt.Errorf("creating archive: %w", err)
+		return fmt.Errorf("build archive: %w", err)
 	}
 
 	client := resty.New().SetTimeout(30 * time.Second)
@@ -88,7 +98,7 @@ func uploadPackage(cmd *cobra.Command, args []string) error {
 			"archive",
 			"my-dir.tar.gz",
 			"application/gzip",
-			bytes.NewReader(archiveBytes.Bytes()),
+			bytes.NewReader(buf.Bytes()),
 		).
 		SetResult(&uploadResponse{}).
 		SetError(&uploadError{}).
