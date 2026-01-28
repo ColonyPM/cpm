@@ -25,7 +25,7 @@ func createFile(pkgPath string, fileName string) error {
 	var write func() error
 
 	switch fileName {
-	case "manifest.yaml":
+	case "package.yaml":
 		write = func() error {
 			return pkg.WriteManifest(f, pkg.NewDefaultManifest(pkgName))
 		}
@@ -82,7 +82,7 @@ func initPackage(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create manifest.yaml, README.md, values.yaml
-	files := []string{"manifest.yaml", "README.md", "values.yaml"}
+	files := []string{"package.yaml", "README.md", "values.yaml"}
 
 	for _, name := range files {
 		if err := createFile(pkgPath, name); err != nil {
