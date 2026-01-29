@@ -13,12 +13,11 @@ import (
 )
 
 var All bool
-var pkgPath string
 
 func removepkg(cmd *cobra.Command, args []string) error {
-	pkgsDir := pkg.GetPackagesDir()
+	pkgsDir, err := pkg.GetPackagesDir()
 	pkgsname, version, versionexist := strings.Cut(args[0], "@")
-
+	
 	//Move to directory
 	pkgspath := filepath.Join(pkgsDir, pkgsname)
 	err := os.Chdir(pkgspath)
@@ -29,7 +28,7 @@ func removepkg(cmd *cobra.Command, args []string) error {
 		pkgsversionpath := filepath.Join(pkgspath, version)
 		err := os.RemoveAll(pkgsversionpath)
 		if err != nil {
-			return fmt.Errorf("Version", version,"not found: %w")
+			return fmt.Errorf("Version", version,"not found: %w",err)
 		}
 	}
 	All, _ := cmd.Flags().GetBool("All")
@@ -52,7 +51,6 @@ func newPkgRemoveCmd() *cobra.Command {
 	}
 	// Local flag: only applies to `serve`.
 	cmd.Flags().BoolVar(&All, "All", false, "remove ALL versions")
-	//cmd.Flags().StringVar(&Dir, "Dir", "", "package directory")
-
+	
 	return cmd
 }
