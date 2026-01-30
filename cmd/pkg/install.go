@@ -18,7 +18,9 @@ import (
 )
 
 // /api/packages/{name}/download
-const baseURL = "https://colonypm.xyz/api/"
+var baseURL = "https://colonypm.xyz/api/"
+var getPackagesDir = pkg.GetPackagesDir
+var newRestyClient = resty.New
 
 type DownloadError struct {
 	Detail string `json:"detail"`
@@ -29,7 +31,7 @@ func installPackage(cmd *cobra.Command, args []string) error {
 	s.Prefix = fmt.Sprintf("Downloading %s ", args[0])
 	s.Start()
 
-	client := resty.New()
+	client := newRestyClient() // change her resty.new()
 	resp, err := client.R().
 		SetError(&DownloadError{}).
 		Get(baseURL + "packages/" + args[0] + "/download")
@@ -41,7 +43,7 @@ func installPackage(cmd *cobra.Command, args []string) error {
 		return errors.New(resp.Error().(*DownloadError).Detail)
 	}
 
-	pkgsDir := pkg.GetPackagesDir()
+	pkgsDir := getPackagesDir() // pkg.GetPackagesDir()
 
 	format := archives.CompressedArchive{
 		Compression: archives.Gz{},
