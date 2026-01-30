@@ -124,9 +124,3 @@ func TestValidateDir(t *testing.T){
 		
 	})
 }
-
-
-
-func TestUploadPackage(t *testing.T){
-	
-}
