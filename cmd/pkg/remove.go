@@ -15,7 +15,7 @@ import (
 var All bool
 
 func removepkg(cmd *cobra.Command, args []string) error {
-	pkgsDir, err := pkg.GetPackagesDir()
+	pkgsDir:= pkg.GetPackagesDir()
 	pkgsname, version, versionexist := strings.Cut(args[0], "@")
 	
 	//Move to directory
@@ -28,7 +28,7 @@ func removepkg(cmd *cobra.Command, args []string) error {
 		pkgsversionpath := filepath.Join(pkgspath, version)
 		err := os.RemoveAll(pkgsversionpath)
 		if err != nil {
-			return fmt.Errorf("Version", version,"not found: %w",err)
+			return fmt.Errorf("Version not found: %w",err)
 		}
 	}
 	All, _ := cmd.Flags().GetBool("All")
