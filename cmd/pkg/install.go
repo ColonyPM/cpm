@@ -3,7 +3,6 @@ package pkgcmd
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -30,20 +29,25 @@ func installPackage(cmd *cobra.Command, args []string) error {
 	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
 	s.Prefix = fmt.Sprintf("Downloading %s ", args[0])
 	s.Start()
+	
+	defer s.Stop()
 
-	client := newRestyClient() // change her resty.new()
+	client := newRestyClient()
 	resp, err := client.R().
 		SetError(&DownloadError{}).
 		Get(baseURL + "packages/" + args[0] + "/download")
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to download package: %w", err)
 	}
 
 	if resp.IsError() {
-		return errors.New(resp.Error().(*DownloadError).Detail)
+		if apiErr, ok := resp.Error().(*DownloadError); ok && apiErr.Detail != "" {
+			return fmt.Errorf("download failed %s", apiErr.Detail)
+		}
+		return fmt.Errorf("download failed %s", resp.Status())
 	}
 
-	pkgsDir := getPackagesDir() // pkg.GetPackagesDir()
+	pkgsDir := getPackagesDir() 
 
 	format := archives.CompressedArchive{
 		Compression: archives.Gz{},
