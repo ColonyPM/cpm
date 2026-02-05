@@ -1,17 +1,18 @@
 package deploycmd
 
 import (
-	"os"
+	"io"
 	"strings"
 	"time"
-
+	"context"
 	"github.com/ColonyPM/cpm/internal/storectx"
 	"github.com/aquasecurity/table"
 	"github.com/spf13/cobra"
+	"github.com/ColonyPM/cpm/internal/db"
 )
 
-func newListTable() *table.Table {
-	t := table.New(os.Stdout)
+func newListTable(w io.Writer) *table.Table {
+	t := table.New(w)
 
 	t.SetHeaderStyle(table.StyleBold)
 	t.SetLineStyle(table.StyleBlue)
@@ -29,10 +30,13 @@ func newListTable() *table.Table {
 
 const zeroWidthSpace = "\u200b"
 
-func list(cmd *cobra.Command, args []string) error {
-	t := newListTable()
+type deployQ interface{
+	ListDeployments(ctx context.Context) ([]db.Deployment, error)
+	ListExecutorsByDeployment(ctx context.Context, deploymentID int64) ([]db.Executor, error)
+}
 
-	_, q := storectx.GetDb(cmd.Root().Context())
+func runList(cmd *cobra.Command, args []string, q deployQ) error {
+	t := newListTable(cmd.OutOrStdout())
 
 	deployments, err := q.ListDeployments(cmd.Context())
 	if err != nil {
@@ -60,6 +64,11 @@ func list(cmd *cobra.Command, args []string) error {
 	t.Render()
 
 	return nil
+}
+
+func list(cmd *cobra.Command, args []string) error {
+	_, q := storectx.GetDb(cmd.Root().Context())
+	return runList(cmd, args, q)
 }
 
 func newDeployListCmd() *cobra.Command {
