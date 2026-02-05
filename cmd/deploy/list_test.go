@@ -19,18 +19,11 @@ type mockDeployQ struct {
 
 func (m *mockDeployQ) ListDeployments(ctx context.Context) ([]db.Deployment, error) {
 	args := m.Called(ctx)
-	if args.Get(0) == nil {
-			return nil, args.Error(1)
-		}
-		return args.Get(0).([]db.Deployment), args.Error(1)
 	return args.Get(0).([]db.Deployment), args.Error(1)
 }
 
 func (m *mockDeployQ) ListExecutorsByDeployment(ctx context.Context, deploymentID int64) ([]db.Executor, error) {
 	args := m.Called(ctx, deploymentID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
 	return args.Get(0).([]db.Executor), args.Error(1)
 }
 
