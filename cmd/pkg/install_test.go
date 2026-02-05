@@ -24,7 +24,7 @@ func TestInstallPackage_UsesDownloadedArchives(t *testing.T) {
 	buf, err := buildArchive(ctx, srcDir)
 	require.NoError(t, err)
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/packages/mypkg/download" {
 			http.NotFound(w, r)
 			return
@@ -32,7 +32,7 @@ func TestInstallPackage_UsesDownloadedArchives(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(buf.Bytes())
 	}))
-	defer srv.Close()
+	defer server.Close()
 
 	oldBaseURL := baseURL
 	oldGetPackagesDir := getPackagesDir
@@ -43,7 +43,7 @@ func TestInstallPackage_UsesDownloadedArchives(t *testing.T) {
 		newRestyClient = oldNewRestyClient
 	})
 
-	baseURL = srv.URL + "/api/"
+	baseURL = server.URL + "/api/"
 	pkgsDir := t.TempDir()
 	getPackagesDir = func() string { return pkgsDir }
 

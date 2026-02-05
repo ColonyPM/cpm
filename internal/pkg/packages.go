@@ -121,10 +121,13 @@ func GetPackageManifest(pkgName string) (*Manifest, error) {
 	return m, nil
 }
 
+var getPackageDirectory = GetPackageDirectory
+var convertJSONToFunctionSpec = core.ConvertJSONToFunctionSpec
+
 func GetFunctionSpec(pkgName, fnSpecName string) (*core.FunctionSpec, error) {
 	// Re-use our validated getter.
 	// This replaces your first 15 lines of stat/exist checks.
-	pkgDir, err := GetPackageDirectory(pkgName)
+	pkgDir, err := getPackageDirectory(pkgName)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +162,7 @@ func GetFunctionSpec(pkgName, fnSpecName string) (*core.FunctionSpec, error) {
 		return nil, fmt.Errorf("reading function spec %q: %w", specPath, err)
 	}
 
-	fs, err := core.ConvertJSONToFunctionSpec(string(data))
+	fs, err := convertJSONToFunctionSpec(string(data))
 	if err != nil {
 		return nil, fmt.Errorf("parsing function spec %q: %w", specPath, err)
 	}
