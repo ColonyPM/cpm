@@ -2,28 +2,30 @@ package pkgcmd
 
 import (
 	"fmt"
-
 	"os"
 	"path/filepath"
-	"strings"
-
+	//"strings"
 	"github.com/ColonyPM/cpm/internal/pkg"
 	"github.com/spf13/cobra"
-	//"errors"
 )
 
 var All bool
+var GetPackages = pkg.GetPackagesDir
 
-func removepkg(cmd *cobra.Command, args []string) error {
-	pkgsDir:= pkg.GetPackagesDir()
-	pkgsname, version, versionexist := strings.Cut(args[0], "@")
-	
+func RemovePkg(cmd *cobra.Command, args []string) error {
+	pkgsDir := GetPackages()
+	//pkgsname, version, versionexist := strings.Cut(args[0], "@")	
+	pkgsname := args[0]
 	//Move to directory
 	pkgspath := filepath.Join(pkgsDir, pkgsname)
 	err := os.Chdir(pkgspath)
 	if err != nil {
-		return fmt.Errorf("No package found. If intending to remove the entire directory, use the '-all' flag: %w", err)
+		return fmt.Errorf("No package found.: %w", err)
 	}
+	err = os.RemoveAll(pkgspath)
+
+
+/* Old version implementation, might be removed later.
 	if versionexist == true {
 		pkgsversionpath := filepath.Join(pkgspath, version)
 		err := os.RemoveAll(pkgsversionpath)
@@ -35,7 +37,7 @@ func removepkg(cmd *cobra.Command, args []string) error {
 	if All == true {
 		err = os.RemoveAll(pkgspath)
 	}
-
+*/
 	println("package", args[0], "removed")
 
 	return (nil)
@@ -47,7 +49,7 @@ func newPkgRemoveCmd() *cobra.Command {
 		Aliases: []string{"rm"},
 		Short:   "Remove a package",
 		Args:    cobra.ExactArgs(1),
-		RunE:    removepkg,
+		RunE:    RemovePkg,
 	}
 	// Local flag: only applies to `serve`.
 	cmd.Flags().BoolVar(&All, "All", false, "remove ALL versions")
