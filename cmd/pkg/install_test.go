@@ -14,11 +14,15 @@ import (
 
 func TestInstallPackage_UsesDownloadedArchives(t *testing.T) {
 	ctx := context.Background()
-
+	pkgAndVersion := "mypkg@1.0.0"
 	srcDir := t.TempDir()
 	version := "1.0.0"
 	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, version, "templates"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(srcDir, version, "package.yaml"), []byte("name: demo\n"), 0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(srcDir, version, "package.yaml"),
+		[]byte("name: mypkg@1.0.0\nversion: 1.0.0\n"),
+		0o644,
+	))
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, version, "README.md"), []byte("# demo\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, version, "values.yaml"), []byte("global:\n"), 0o644))
 
@@ -26,7 +30,7 @@ func TestInstallPackage_UsesDownloadedArchives(t *testing.T) {
 	require.NoError(t, err)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/packages/mypkg@1.0.0/download" {
+		if r.URL.Path != "/api/packages/"+pkgAndVersion+"/download" {
 			http.NotFound(w, r)
 			return
 		}
@@ -51,7 +55,7 @@ func TestInstallPackage_UsesDownloadedArchives(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.SetContext(ctx)
 
-	err = installPackage(cmd, []string{"mypkg@1.0.0"})
+	err = installPackage(cmd, []string{pkgAndVersion})
 	require.NoError(t, err)
 
 	pkgName := "mypkg"
