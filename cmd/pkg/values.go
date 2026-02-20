@@ -54,17 +54,17 @@ func copyFile(srcPath, dstPath string) error {
 func values(cmd *cobra.Command, args []string) error {
 	pkgName := args[0]
 
+	_, version, hasAt := strings.Cut(pkgName, "@")
+	if !hasAt || version == "" {
+		return fmt.Errorf("Please specify version")
+	}
+	
 	srcPath, err := getValuesPath(pkgName)
 	if err != nil {
 		return err
 	}
 
-	fileName, version, hasAt := strings.Cut(pkgName, "@")
-	if !hasAt || version == "" {
-		version = "latest"
-	}
-
-	defaultName := "values." + fileName + "@" + version + ".yaml"
+	defaultName := "values." + pkgName + ".yaml"
 	var dstPath string
 
 	if len(args) > 1 {
