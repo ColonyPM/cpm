@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/colonyos/colonies/pkg/core"
 	"gopkg.in/yaml.v3"
@@ -173,12 +174,15 @@ func GetFunctionSpec(pkgName, fnSpecName string) (*core.FunctionSpec, error) {
 // In pkg/package.go (or similar)
 
 func GetValuesPath(pkgName string) (string, error) {
-	pkgDir, err := GetPackageDirectory(pkgName)
+	fileRootName, version, _ := strings.Cut(pkgName, "@")
+
+	pkgDir, err := GetPackageDirectory(fileRootName)
 	if err != nil {
 		return "", err
 	}
+	pkgVersionDir := filepath.Join(pkgDir, version)
 
-	valuesPath := filepath.Join(pkgDir, "values.yaml")
+	valuesPath := filepath.Join(pkgVersionDir, "values.yaml")
 
 	info, err := os.Stat(valuesPath)
 	if err != nil {
