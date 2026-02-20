@@ -26,57 +26,13 @@ type DownloadError struct {
 	Detail string `json:"detail"`
 }
 
-func installPackage(cmd *cobra.Command, args []string) error {
-	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
-	s.Prefix = fmt.Sprintf("Downloading %s ", args[0])
-	s.Start()
-
-	defer s.Stop()
-
-	client := newRestyClient()
-	resp, err := client.R().
-		SetError(&DownloadError{}).
-		Get(baseURL + "packages/" + args[0] + "/download")
-	if err != nil {
-		return fmt.Errorf("failed to install package: %w", err)
-	}
-
-	if resp.IsError() {
-		if apiErr, ok := resp.Error().(*DownloadError); ok && apiErr.Detail != "" {
-			return fmt.Errorf("install failed %s", apiErr.Detail)
-		}
-		return fmt.Errorf("install failed %s", resp.Status())
-	}
-
-	fileRootName, version, hasAt := strings.Cut(args[0], "@")
-	if !hasAt || version == "" {
-		version = "latest"
-	}
-
-	if strings.Contains(fileRootName, "/") || strings.Contains(fileRootName, "..") {
-		return fmt.Errorf("invalid package name")
-	}
-
-	if strings.Contains(version, "/") || strings.Contains(version, "..") {
-		return fmt.Errorf("invalid package name")
-	}
-
-	pkgsDir := getPackagesDir()
-
-	pkgRoot := filepath.Join(pkgsDir, fileRootName)
-	installRoot := filepath.Join(pkgRoot, version)
-
-	_ = os.RemoveAll(installRoot)
-	if err := os.MkdirAll(installRoot, 0o755); err != nil {
-		return fmt.Errorf("failed to create install directory: %w", err)
-	}
-
+func extractPackage(cmd *cobra.Command, resp *resty.Response, installRoot string) error {
 	format := archives.CompressedArchive{
 		Compression: archives.Gz{},
 		Extraction:  archives.Tar{},
 	}
 
-	err = format.Extract(cmd.Context(), bytes.NewReader(resp.Body()), func(ctx context.Context, f archives.FileInfo) error {
+	err := format.Extract(cmd.Context(), bytes.NewReader(resp.Body()), func(ctx context.Context, f archives.FileInfo) error {
 		info, err := f.Stat()
 		if err != nil {
 			return err
@@ -109,14 +65,101 @@ func installPackage(cmd *cobra.Command, args []string) error {
 		return err
 	})
 
+	return err
+}
+
+func installPackage(cmd *cobra.Command, args []string) error {
+	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+	s.Prefix = fmt.Sprintf("Downloading %s ", args[0])
+	s.Start()
+
+	time.Sleep(1 * time.Second)
+	client := newRestyClient()
+	resp, err := client.R().
+		SetError(&DownloadError{}).
+		Get(baseURL + "packages/" + args[0] + "/download")
 	if err != nil {
-		s.Stop()
+		return fmt.Errorf("failed to install package: %w", err)
+	}
+
+	if resp.IsError() {
+		if apiErr, ok := resp.Error().(*DownloadError); ok && apiErr.Detail != "" {
+			return fmt.Errorf("install failed %s", apiErr.Detail)
+		}
+		return fmt.Errorf("install failed %s", resp.Status())
+	}
+
+	fileRootName, version, hasAt := strings.Cut(args[0], "@")
+	if !hasAt || version == "" {
+		return fmt.Errorf("Please specify version (pkg@version or pkg@latest)")
+	}
+
+	if strings.Contains(fileRootName, "/") || strings.Contains(fileRootName, "..") {
+		return fmt.Errorf("invalid package name")
+	}
+
+	if strings.Contains(version, "/") || strings.Contains(version, "..") {
+		return fmt.Errorf("invalid package name")
+	}
+
+	pkgsDir := getPackagesDir()
+	pkgRoot := filepath.Join(pkgsDir, fileRootName)
+
+	if err := os.MkdirAll(pkgRoot, 0o755); err != nil {
+		return fmt.Errorf("failed to create package root: %w", err)
+	}
+
+	tempDir, err := os.MkdirTemp(pkgRoot, ".install-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp dir: %w", err)
+	}
+
+	committed := false
+	defer func() {
+		if !committed {
+			_ = os.RemoveAll(tempDir)
+		}
+	}()
+
+	if err := extractPackage(cmd, resp, tempDir); err != nil {
 		return err
 	}
 
-	s.Stop()
-	fmt.Printf("Installed %s\n", args[0])
+	readManifest, err := os.Open(filepath.Join(tempDir, "package.yaml"))
+	if err != nil {
+		return fmt.Errorf("open manifest: %w", err)
+	}
 
+	manifest, err := pkg.ReadManifest(readManifest)
+	_ = readManifest.Close()
+
+	if err != nil {
+		return fmt.Errorf("read manifest: %w", err)
+	}
+	if manifest.Version == "" {
+		return fmt.Errorf("manifest missing version")
+	}
+
+	if version == "latest" {
+		version = manifest.Version
+	} else if manifest.Version != version {
+		return fmt.Errorf("manifest version %q does not match desired version %q", manifest.Version, version)
+	}
+
+	if strings.Contains(version, "/") || strings.Contains(version, "..") {
+		return fmt.Errorf("invalid manifest version")
+	}
+
+	installRoot := filepath.Join(pkgRoot, version)
+
+	_ = os.RemoveAll(installRoot)
+	if err := os.Rename(tempDir, installRoot); err != nil {
+		return fmt.Errorf("finalize install: %w", err)
+	}
+	committed = true
+
+	s.Stop()
+	fmt.Printf("Installed %s@%s\n", fileRootName, version)
 	return nil
 }
 
