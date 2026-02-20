@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/ColonyPM/cpm/internal/pkg"
@@ -29,7 +30,7 @@ func installPackage(cmd *cobra.Command, args []string) error {
 	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
 	s.Prefix = fmt.Sprintf("Downloading %s ", args[0])
 	s.Start()
-	
+
 	defer s.Stop()
 
 	client := newRestyClient()
@@ -37,17 +38,38 @@ func installPackage(cmd *cobra.Command, args []string) error {
 		SetError(&DownloadError{}).
 		Get(baseURL + "packages/" + args[0] + "/download")
 	if err != nil {
-		return fmt.Errorf("failed to download package: %w", err)
+		return fmt.Errorf("failed to install package: %w", err)
 	}
 
 	if resp.IsError() {
 		if apiErr, ok := resp.Error().(*DownloadError); ok && apiErr.Detail != "" {
-			return fmt.Errorf("download failed %s", apiErr.Detail)
+			return fmt.Errorf("install failed %s", apiErr.Detail)
 		}
-		return fmt.Errorf("download failed %s", resp.Status())
+		return fmt.Errorf("install failed %s", resp.Status())
 	}
 
-	pkgsDir := getPackagesDir() 
+	fileRootName, version, hasAt := strings.Cut(args[0], "@")
+	if !hasAt || version == "" {
+		version = "latest"
+	}
+
+	if strings.Contains(fileRootName, "/") || strings.Contains(fileRootName, "..") {
+		return fmt.Errorf("invalid package name")
+	}
+
+	if strings.Contains(version, "/") || strings.Contains(version, "..") {
+		return fmt.Errorf("invalid package name")
+	}
+
+	pkgsDir := getPackagesDir()
+
+	pkgRoot := filepath.Join(pkgsDir, fileRootName)
+	installRoot := filepath.Join(pkgRoot, version)
+
+	_ = os.RemoveAll(installRoot)
+	if err := os.MkdirAll(installRoot, 0o755); err != nil {
+		return fmt.Errorf("failed to create install directory: %w", err)
+	}
 
 	format := archives.CompressedArchive{
 		Compression: archives.Gz{},
@@ -61,7 +83,7 @@ func installPackage(cmd *cobra.Command, args []string) error {
 		}
 
 		name := f.NameInArchive
-		targetPath := filepath.Join(pkgsDir, name)
+		targetPath := filepath.Join(installRoot, name)
 
 		if info.IsDir() {
 			return os.MkdirAll(targetPath, 0o755)
@@ -93,14 +115,14 @@ func installPackage(cmd *cobra.Command, args []string) error {
 	}
 
 	s.Stop()
-	fmt.Printf("Downloaded %s\n", args[0])
+	fmt.Printf("Installed %s\n", args[0])
 
 	return nil
 }
 
 func newPkgInstallCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "install <pkg>",
+		Use:   "install <pkg@version>",
 		Short: "Install a package",
 		Args:  cobra.ExactArgs(1),
 		RunE:  installPackage,
