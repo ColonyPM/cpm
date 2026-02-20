@@ -20,7 +20,7 @@ func TestValuesCmd(t *testing.T) {
 	defer func() { getValuesPath = originalGetValues }()
 
 	getValuesPath = func(pkgName string) (string, error) {
-		if pkgName == "valid-pkg" {
+		if pkgName == "valid-pkg@1.0.0" {
 			return fakeSourcePath, nil
 		}
 		return "", os.ErrNotExist
@@ -35,14 +35,14 @@ func TestValuesCmd(t *testing.T) {
 	}{
 		{
 			name: "Success: Explicit File",
-			args: []string{"valid-pkg"},
+			args: []string{"valid-pkg@1.0.0"},
 			prepareDest: func() string {
 				return filepath.Join(tempDir, "custom.yaml")
 			},
 		},
 		{
 			name: "Failure: Destination Exists",
-			args: []string{"valid-pkg"},
+			args: []string{"valid-pkg@1.0.0"},
 			prepareDest: func() string {
 				p := filepath.Join(tempDir, "exists.yaml")
 				require.NoError(t, os.WriteFile(p, []byte("old"), 0644))
@@ -52,17 +52,17 @@ func TestValuesCmd(t *testing.T) {
 		},
 		{
 			name: "Success: Destination is Directory",
-			args: []string{"valid-pkg"},
+			args: []string{"valid-pkg@1.0.0"},
 			prepareDest: func() string {
 				dir := filepath.Join(tempDir, "configs")
 				require.NoError(t, os.Mkdir(dir, 0755))
 				return dir
 			},
-			expectedFile: filepath.Join(tempDir, "configs", "values.valid-pkg.yaml"),
+			expectedFile: filepath.Join(tempDir, "configs", "values.valid-pkg@1.0.0.yaml"),
 		},
 		{
 			name: "Success: Create Parent Directories",
-			args: []string{"valid-pkg"},
+			args: []string{"valid-pkg@1.0.0"},
 			prepareDest: func() string {
 				return filepath.Join(tempDir, "missing", "folder", "values.yaml")
 			},
