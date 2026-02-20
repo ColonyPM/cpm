@@ -16,16 +16,17 @@ func TestInstallPackage_UsesDownloadedArchives(t *testing.T) {
 	ctx := context.Background()
 
 	srcDir := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "templates"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "package.yaml"), []byte("name: demo\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "README.md"), []byte("# demo\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "values.yaml"), []byte("global:\n"), 0o644))
+	version := "1.0.0"
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, version, "templates"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, version, "package.yaml"), []byte("name: demo\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, version, "README.md"), []byte("# demo\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, version, "values.yaml"), []byte("global:\n"), 0o644))
 
-	buf, err := buildArchive(ctx, srcDir)
+	buf, err := buildArchive(ctx, filepath.Join(srcDir, version))
 	require.NoError(t, err)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/packages/mypkg/download" {
+		if r.URL.Path != "/api/packages/mypkg@1.0.0/download" {
 			http.NotFound(w, r)
 			return
 		}
@@ -43,22 +44,21 @@ func TestInstallPackage_UsesDownloadedArchives(t *testing.T) {
 		newRestyClient = oldNewRestyClient
 	})
 
-	baseURL = server.URL + "/api/"
+	baseURL = server.URL + "/api/" //strings.TrimRight(server.URL, "/") + "/api"
 	pkgsDir := t.TempDir()
 	getPackagesDir = func() string { return pkgsDir }
 
 	cmd := &cobra.Command{}
 	cmd.SetContext(ctx)
 
-	err = installPackage(cmd, []string{"mypkg"})
+	err = installPackage(cmd, []string{"mypkg@1.0.0"})
 	require.NoError(t, err)
 
-	top := filepath.Base(srcDir)
+	pkgName := "mypkg"
 
-	require.FileExists(t, filepath.Join(pkgsDir, top, "package.yaml"))
-	require.FileExists(t, filepath.Join(pkgsDir, top, "README.md"))
-	require.FileExists(t, filepath.Join(pkgsDir, top, "values.yaml"))
-	require.DirExists(t, filepath.Join(pkgsDir, top, "templates"))
+	require.FileExists(t, filepath.Join(pkgsDir, pkgName, version, "package.yaml"))
+	require.FileExists(t, filepath.Join(pkgsDir, pkgName, version, "README.md"))
+	require.FileExists(t, filepath.Join(pkgsDir, pkgName, version, "values.yaml"))
+	require.DirExists(t, filepath.Join(pkgsDir, pkgName, version, "templates"))
 
 }
-
