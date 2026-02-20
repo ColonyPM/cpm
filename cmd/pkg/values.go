@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/ColonyPM/cpm/internal/pkg"
 	"github.com/spf13/cobra"
@@ -58,7 +59,12 @@ func values(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	defaultName := "values." + pkgName + ".yaml"
+	fileName, version, hasAt := strings.Cut(pkgName, "@")
+	if !hasAt || version == "" {
+		version = "latest"
+	}
+
+	defaultName := "values." + fileName + "@" + version + ".yaml"
 	var dstPath string
 
 	if len(args) > 1 {
