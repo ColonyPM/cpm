@@ -16,11 +16,11 @@ func TestCreatFile_Readme(t *testing.T) {
 		t.Fatal("mkdir", err)
 	}
 	
-	if err := createFile(pkgDir, "README.md"); err != nil {
+	if err := createFile(pkgDir, "readme.md"); err != nil {
 		t.Fatal("createFile", err)
 	}
 	
-	content, err := os.ReadFile(filepath.Join(pkgDir, "README.md"))
+	content, err := os.ReadFile(filepath.Join(pkgDir, "readme.md"))
 	if err != nil {
 		t.Fatal("readFile", err)
 	}
