@@ -4,40 +4,40 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	//"strings"
+	"strings"
 	"github.com/ColonyPM/cpm/internal/pkg"
 	"github.com/spf13/cobra"
 )
 
-var All bool
+var all bool
 var GetPackages = pkg.GetPackagesDir
 
 func RemovePkg(cmd *cobra.Command, args []string) error {
-	pkgsDir := GetPackages()
-	//pkgsname, version, versionexist := strings.Cut(args[0], "@")	
-	pkgsname := args[0]
+	pkgDir := GetPackages()
+	pkgname, version, versionexist := strings.Cut(args[0], "@")
 	//Move to directory
-	pkgspath := filepath.Join(pkgsDir, pkgsname)
-	err := os.Chdir(pkgspath)
+	pkgpath := filepath.Join(pkgDir, pkgname)
+	err := os.Chdir(pkgpath)
 	if err != nil {
 		return fmt.Errorf("No package found.: %w", err)
 	}
-	err = os.RemoveAll(pkgspath)
 
-
-/* Old version implementation, might be removed later.
 	if versionexist == true {
-		pkgsversionpath := filepath.Join(pkgspath, version)
-		err := os.RemoveAll(pkgsversionpath)
+		pkgversionpath := filepath.Join(pkgpath,version)
+		err = os.RemoveAll(pkgversionpath)
 		if err != nil {
-			return fmt.Errorf("Version not found: %w",err)
+			return fmt.Errorf("The version",version,"was not found.", err)
 		}
+	}	else {
+		all, _ := cmd.Flags().GetBool("all")
+		if all == true {
+			err = os.RemoveAll(pkgpath)
+			if err != nil {
+				return fmt.Errorf("No package found.: %w", err)
+			}
+		} 
+
 	}
-	All, _ := cmd.Flags().GetBool("All")
-	if All == true {
-		err = os.RemoveAll(pkgspath)
-	}
-*/
 	println("package", args[0], "removed")
 
 	return (nil)
@@ -47,12 +47,11 @@ func newPkgRemoveCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "remove <pkg>",
 		Aliases: []string{"rm"},
-		Short:   "Remove a package",
-		Args:    cobra.ExactArgs(1),
+		Short:   "Removes packages in the default directory",
+		Long:"Removes packages in the default directory as defined in the config. Can delete individual versions through the 'pkgname@version' syntax as well as the entire package with the --all flag: 'pkgname --all'.",
+		Args:    cobra.MaximumNArgs(1),
 		RunE:    RemovePkg,
 	}
-	// Local flag: only applies to `serve`.
-	cmd.Flags().BoolVar(&All, "All", false, "remove ALL versions")
-	
+	cmd.Flags().BoolVar(&all, "all", false, "Remove ALL versions")
 	return cmd
 }
