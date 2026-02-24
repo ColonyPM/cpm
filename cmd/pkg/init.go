@@ -30,10 +30,10 @@ func createFile(pkgPath string, fileName string) error {
 			return pkg.WriteManifest(f, pkg.NewDefaultManifest(pkgName))
 		}
 
-	case "README.md":
+	case "readme.md":
 		write = func() error {
 			if _, err := fmt.Fprintf(f, "# %s\n", pkgName); err != nil {
-				return fmt.Errorf("error writing README: %w", err)
+				return fmt.Errorf("error writing readme: %w", err)
 			}
 			return nil
 		}
@@ -82,7 +82,7 @@ func initPackage(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create manifest.yaml, README.md, values.yaml
-	files := []string{"package.yaml", "README.md", "values.yaml"}
+	files := []string{"package.yaml", "readme.md", "values.yaml"}
 
 	for _, name := range files {
 		if err := createFile(pkgPath, name); err != nil {

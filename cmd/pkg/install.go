@@ -18,7 +18,7 @@ import (
 )
 
 // /api/packages/{name}/download
-var baseURL = "https://colonypm.xyz/api/"
+var baseURL = "https://colonypm.xxx/api/" 
 var getPackagesDir = pkg.GetPackagesDir
 var newRestyClient = resty.New
 
@@ -73,32 +73,40 @@ func installPackage(cmd *cobra.Command, args []string) error {
 	s.Prefix = fmt.Sprintf("Downloading %s ", args[0])
 	s.Start()
 
+	defer s.Stop()
+
 	time.Sleep(1 * time.Second)
 	client := newRestyClient()
 	resp, err := client.R().
 		SetError(&DownloadError{}).
 		Get(baseURL + "packages/" + args[0] + "/download")
 	if err != nil {
+		s.Stop()
 		return fmt.Errorf("failed to install package: %w", err)
 	}
 
 	if resp.IsError() {
 		if apiErr, ok := resp.Error().(*DownloadError); ok && apiErr.Detail != "" {
+			s.Stop()
 			return fmt.Errorf("install failed %s", apiErr.Detail)
 		}
+		s.Stop()
 		return fmt.Errorf("install failed %s", resp.Status())
 	}
 
 	fileRootName, version, hasAt := strings.Cut(args[0], "@")
 	if !hasAt || version == "" {
+		s.Stop()
 		return fmt.Errorf("Please specify version (pkg@version or pkg@latest)")
 	}
 
 	if strings.Contains(fileRootName, "/") || strings.Contains(fileRootName, "..") {
+		s.Stop()
 		return fmt.Errorf("invalid package name")
 	}
 
 	if strings.Contains(version, "/") || strings.Contains(version, "..") {
+		s.Stop()
 		return fmt.Errorf("invalid package name")
 	}
 
@@ -106,11 +114,13 @@ func installPackage(cmd *cobra.Command, args []string) error {
 	pkgRoot := filepath.Join(pkgsDir, fileRootName)
 
 	if err := os.MkdirAll(pkgRoot, 0o755); err != nil {
+		s.Stop()
 		return fmt.Errorf("failed to create package root: %w", err)
 	}
 
 	tempDir, err := os.MkdirTemp(pkgRoot, ".install-*")
 	if err != nil {
+		s.Stop()
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
 
@@ -122,11 +132,13 @@ func installPackage(cmd *cobra.Command, args []string) error {
 	}()
 
 	if err := extractPackage(cmd, resp, tempDir); err != nil {
+		s.Stop()
 		return err
 	}
 
 	readManifest, err := os.Open(filepath.Join(tempDir, "package.yaml"))
 	if err != nil {
+		s.Stop()
 		return fmt.Errorf("open manifest: %w", err)
 	}
 
@@ -134,19 +146,23 @@ func installPackage(cmd *cobra.Command, args []string) error {
 	_ = readManifest.Close()
 
 	if err != nil {
+		s.Stop()
 		return fmt.Errorf("read manifest: %w", err)
 	}
 	if manifest.Version == "" {
+		s.Stop()
 		return fmt.Errorf("manifest missing version")
 	}
 
 	if version == "latest" {
 		version = manifest.Version
 	} else if manifest.Version != version {
+		s.Stop()
 		return fmt.Errorf("manifest version %q does not match desired version %q", manifest.Version, version)
 	}
 
 	if strings.Contains(version, "/") || strings.Contains(version, "..") {
+		s.Stop()
 		return fmt.Errorf("invalid manifest version")
 	}
 
@@ -154,6 +170,7 @@ func installPackage(cmd *cobra.Command, args []string) error {
 
 	_ = os.RemoveAll(installRoot)
 	if err := os.Rename(tempDir, installRoot); err != nil {
+		s.Stop()
 		return fmt.Errorf("finalize install: %w", err)
 	}
 	committed = true

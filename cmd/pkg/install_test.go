@@ -23,7 +23,7 @@ func TestInstallPackage_UsesDownloadedArchives(t *testing.T) {
 		[]byte("name: mypkg@1.0.0\nversion: 1.0.0\n"),
 		0o644,
 	))
-	require.NoError(t, os.WriteFile(filepath.Join(srcDir, version, "README.md"), []byte("# demo\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, version, "readme.md"), []byte("# demo\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, version, "values.yaml"), []byte("global:\n"), 0o644))
 
 	buf, err := buildArchive(ctx, filepath.Join(srcDir, version))
@@ -48,7 +48,7 @@ func TestInstallPackage_UsesDownloadedArchives(t *testing.T) {
 		newRestyClient = oldNewRestyClient
 	})
 
-	baseURL = server.URL + "/api/" //strings.TrimRight(server.URL, "/") + "/api"
+	baseURL = server.URL + "/api/" 
 	pkgsDir := t.TempDir()
 	getPackagesDir = func() string { return pkgsDir }
 
@@ -61,7 +61,7 @@ func TestInstallPackage_UsesDownloadedArchives(t *testing.T) {
 	pkgName := "mypkg"
 
 	require.FileExists(t, filepath.Join(pkgsDir, pkgName, version, "package.yaml"))
-	require.FileExists(t, filepath.Join(pkgsDir, pkgName, version, "README.md"))
+	require.FileExists(t, filepath.Join(pkgsDir, pkgName, version, "readme.md"))
 	require.FileExists(t, filepath.Join(pkgsDir, pkgName, version, "values.yaml"))
 	require.DirExists(t, filepath.Join(pkgsDir, pkgName, version, "templates"))
 
