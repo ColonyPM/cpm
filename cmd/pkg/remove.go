@@ -11,15 +11,10 @@ import (
 
 var all bool
 var GetPackages = pkg.GetPackagesDir
+var pkgspath string
 
-func RemovePkg(cmd *cobra.Command, args []string) error {
-	pkgDir := GetPackages()
-	pkgname, version, versionexist := strings.Cut(args[0], "@")
-	//Move to directory
-	pkgpath := filepath.Join(pkgDir, pkgname)
-	
-	//Check if package exists.
-	_, err := os.Stat(pkgpath)
+func pkgexist(pkgspath string) error {
+	_, err := os.Stat(pkgspath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("No package found.: %w", err)
@@ -27,27 +22,39 @@ func RemovePkg(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("package error:%w",err)
 		}
 	}
+	return nil
+}
 
+func RemovePkg(cmd *cobra.Command, args []string) error {
+	pkgDir := GetPackages()
+	pkgname, version, versionexist := strings.Cut(args[0], "@")
+	//Move to directory
+	pkgpath := filepath.Join(pkgDir, pkgname)
+	
 	if versionexist == true {
 		pkgversionpath := filepath.Join(pkgpath,version)
-		err = os.RemoveAll(pkgversionpath)
+		err := pkgexist(pkgversionpath)
+		if err != nil {return err}
+		err= os.RemoveAll(pkgversionpath)
 		if err != nil {
-			return fmt.Errorf("The version",version,"was not found.", err)
+			return fmt.Errorf("error")
 		}
 		println(pkgversionpath)
 	}	else {
 		all, _ := cmd.Flags().GetBool("all")
 		if all == true {
+			err := pkgexist(pkgpath)
+			if err != nil {return err}
 			err = os.RemoveAll(pkgpath)
 			if err != nil {
-				return fmt.Errorf("No package found.: %w", err)
+				return fmt.Errorf("Remove command failed: %w", err)
 			}
 			//println("package", args[0], "removed")
 		} else {
 			return fmt.Errorf("To delete the entire package, use the flag -all in the command")
 		}
 	}
-	println("package", args[0], "removed")
+		println("package", args[0], "removed")
 
 	return (nil)
 }
