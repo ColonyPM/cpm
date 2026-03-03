@@ -11,6 +11,7 @@ import (
 
 var all bool
 var GetPackages = pkg.GetPackagesDir
+
 var pkgspath string
 
 func pkgexist(pkgspath string) error {
@@ -39,10 +40,10 @@ func RemovePkg(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("error")
 		}
 	}	else {
+			err := pkgexist(pkgpath)
+			if err != nil {return err}
 			all, _ := cmd.Flags().GetBool("all")
 			if all == true {
-				err := pkgexist(pkgpath)
-				if err != nil {return err}
 				err = os.RemoveAll(pkgpath)
 				if err != nil {
 					return fmt.Errorf("Remove command failed: %w", err)
