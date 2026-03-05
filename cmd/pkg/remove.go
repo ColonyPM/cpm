@@ -53,7 +53,8 @@ func RemovePkg(cmd *cobra.Command, args []string) error {
 				}
 		}
 	println("package", args[0], "removed")
-
+	err :=os.Remove(pkgpath)
+	if err == nil {println("Package",pkgname, "removed")}	
 	return (nil)
 }
 
