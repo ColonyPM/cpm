@@ -106,12 +106,10 @@ func deploy(cmd *cobra.Command, args []string) error {
 
 	_, q := storectx.GetDb(ctx)
 
-	de, err := q.CreateDeployment(ctx, db.CreateDeploymentParams{
-		PkgName:    "SUS",
+	_, err = q.CreateDeployment(ctx, db.CreateDeploymentParams{
+		PkgName:    args[0],
 		DeployedAt: time.Now().UTC(),
 	})
-
-	fmt.Println(de)
 
 	if err != nil {
 		return err

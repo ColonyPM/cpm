@@ -106,8 +106,6 @@ func OpenDB(ctx context.Context, cc *client.ColoniesClient, cfg *config.Config) 
 		if err := fsClient.Download(cfg.Colony.Name, files[0].ID, localDbPath); err != nil {
 			return nil, fmt.Errorf("download db: %w", err)
 		}
-
-		fmt.Println("DOWNLOADED DB")
 	}
 
 	needsInit := false
@@ -145,7 +143,7 @@ func CloseDB(ctx context.Context, cc *client.ColoniesClient, cfg *config.Config)
 	}
 	fsClient.Quiet = true
 
-	sp, err := fsClient.CalcSyncPlan(localDbPath, LABEL, false)
+	sp, err := fsClient.CalcSyncPlan(localDbPath, LABEL, true)
 	if err != nil {
 		return err
 	}
