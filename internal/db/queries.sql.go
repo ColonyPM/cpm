@@ -7,64 +7,69 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"time"
 )
 
-const createDeployment = `-- name: CreateDeployment :one
-
-INSERT INTO deployments (pkg_name, deployed_at)
-VALUES (?, ?)
-RETURNING id, pkg_name, deployed_at
-`
-
-type CreateDeploymentParams struct {
-	PkgName    string
-	DeployedAt time.Time
-}
-
-// Deployments CRUD
-func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentParams) (Deployment, error) {
-	row := q.db.QueryRowContext(ctx, createDeployment, arg.PkgName, arg.DeployedAt)
-	var i Deployment
-	err := row.Scan(&i.ID, &i.PkgName, &i.DeployedAt)
-	return i, err
-}
-
 const createExecutor = `-- name: CreateExecutor :one
 
-INSERT INTO executors (deployment_id, executor_name, container_id)
-VALUES (?, ?, ?)
-RETURNING id, deployment_id, executor_name, container_id
+INSERT INTO executors (revision_id, executor_name, anchor_name, container_id, img_name)
+VALUES (?, ?, ?, ?, ?)
+RETURNING id, revision_id, executor_name, anchor_name, container_id, img_name
 `
 
 type CreateExecutorParams struct {
-	DeploymentID int64
+	RevisionID   int64
 	ExecutorName string
+	AnchorName   string
 	ContainerID  string
+	ImgName      string
 }
 
 // Executors CRUD
 func (q *Queries) CreateExecutor(ctx context.Context, arg CreateExecutorParams) (Executor, error) {
-	row := q.db.QueryRowContext(ctx, createExecutor, arg.DeploymentID, arg.ExecutorName, arg.ContainerID)
+	row := q.db.QueryRowContext(ctx, createExecutor,
+		arg.RevisionID,
+		arg.ExecutorName,
+		arg.AnchorName,
+		arg.ContainerID,
+		arg.ImgName,
+	)
 	var i Executor
 	err := row.Scan(
 		&i.ID,
-		&i.DeploymentID,
+		&i.RevisionID,
 		&i.ExecutorName,
+		&i.AnchorName,
 		&i.ContainerID,
+		&i.ImgName,
 	)
 	return i, err
 }
 
-const deleteDeployment = `-- name: DeleteDeployment :exec
-DELETE FROM deployments
-WHERE id = ?
+const createRevision = `-- name: CreateRevision :one
+
+INSERT INTO revisions (package_name, version, deploy_time)
+VALUES (?, ?, ?)
+RETURNING id, package_name, version, deploy_time
 `
 
-func (q *Queries) DeleteDeployment(ctx context.Context, id int64) error {
-	_, err := q.db.ExecContext(ctx, deleteDeployment, id)
-	return err
+type CreateRevisionParams struct {
+	PackageName string
+	Version     string
+	DeployTime  time.Time
+}
+
+// Revisions CRUD
+func (q *Queries) CreateRevision(ctx context.Context, arg CreateRevisionParams) (Revision, error) {
+	row := q.db.QueryRowContext(ctx, createRevision, arg.PackageName, arg.Version, arg.DeployTime)
+	var i Revision
+	err := row.Scan(
+		&i.ID,
+		&i.PackageName,
+		&i.Version,
+		&i.DeployTime,
+	)
+	return i, err
 }
 
 const deleteExecutor = `-- name: DeleteExecutor :exec
@@ -77,79 +82,18 @@ func (q *Queries) DeleteExecutor(ctx context.Context, id int64) error {
 	return err
 }
 
-const getDeployment = `-- name: GetDeployment :one
-SELECT id, pkg_name, deployed_at
-FROM deployments
+const deleteRevision = `-- name: DeleteRevision :exec
+DELETE FROM revisions
 WHERE id = ?
 `
 
-func (q *Queries) GetDeployment(ctx context.Context, id int64) (Deployment, error) {
-	row := q.db.QueryRowContext(ctx, getDeployment, id)
-	var i Deployment
-	err := row.Scan(&i.ID, &i.PkgName, &i.DeployedAt)
-	return i, err
-}
-
-const getDeploymentWithExecutors = `-- name: GetDeploymentWithExecutors :many
-
-SELECT
-    d.id          AS deployment_id,
-    d.pkg_name    AS deployment_pkg_name,
-    d.deployed_at AS deployment_deployed_at,
-    e.id          AS executor_id,
-    e.deployment_id,
-    e.executor_name,
-    e.container_id
-FROM deployments d
-LEFT JOIN executors e ON e.deployment_id = d.id
-WHERE d.id = ?
-ORDER BY e.id
-`
-
-type GetDeploymentWithExecutorsRow struct {
-	DeploymentID         int64
-	DeploymentPkgName    string
-	DeploymentDeployedAt time.Time
-	ExecutorID           sql.NullInt64
-	DeploymentID_2       sql.NullInt64
-	ExecutorName         sql.NullString
-	ContainerID          sql.NullString
-}
-
-// Deployment with executors (join)
-func (q *Queries) GetDeploymentWithExecutors(ctx context.Context, id int64) ([]GetDeploymentWithExecutorsRow, error) {
-	rows, err := q.db.QueryContext(ctx, getDeploymentWithExecutors, id)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetDeploymentWithExecutorsRow
-	for rows.Next() {
-		var i GetDeploymentWithExecutorsRow
-		if err := rows.Scan(
-			&i.DeploymentID,
-			&i.DeploymentPkgName,
-			&i.DeploymentDeployedAt,
-			&i.ExecutorID,
-			&i.DeploymentID_2,
-			&i.ExecutorName,
-			&i.ContainerID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) DeleteRevision(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteRevision, id)
+	return err
 }
 
 const getExecutor = `-- name: GetExecutor :one
-SELECT id, deployment_id, executor_name, container_id
+SELECT id, revision_id, executor_name, anchor_name, container_id, img_name
 FROM executors
 WHERE id = ?
 `
@@ -159,63 +103,70 @@ func (q *Queries) GetExecutor(ctx context.Context, id int64) (Executor, error) {
 	var i Executor
 	err := row.Scan(
 		&i.ID,
-		&i.DeploymentID,
+		&i.RevisionID,
 		&i.ExecutorName,
+		&i.AnchorName,
 		&i.ContainerID,
+		&i.ImgName,
 	)
 	return i, err
 }
 
-const listDeployments = `-- name: ListDeployments :many
-SELECT id, pkg_name, deployed_at
-FROM deployments
-ORDER BY deployed_at DESC
+const getRevision = `-- name: GetRevision :one
+SELECT id, package_name, version, deploy_time
+FROM revisions
+WHERE id = ?
 `
 
-func (q *Queries) ListDeployments(ctx context.Context) ([]Deployment, error) {
-	rows, err := q.db.QueryContext(ctx, listDeployments)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Deployment
-	for rows.Next() {
-		var i Deployment
-		if err := rows.Scan(&i.ID, &i.PkgName, &i.DeployedAt); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) GetRevision(ctx context.Context, id int64) (Revision, error) {
+	row := q.db.QueryRowContext(ctx, getRevision, id)
+	var i Revision
+	err := row.Scan(
+		&i.ID,
+		&i.PackageName,
+		&i.Version,
+		&i.DeployTime,
+	)
+	return i, err
 }
 
-const listExecutorsByDeployment = `-- name: ListExecutorsByDeployment :many
-SELECT id, deployment_id, executor_name, container_id
-FROM executors
-WHERE deployment_id = ?
-ORDER BY id
+const getRevisionWithExecutors = `-- name: GetRevisionWithExecutors :many
+
+SELECT
+    r.revision, r.revision, r.revision, r.revision AS revision,
+    e.executor, e.executor, e.executor, e.executor, e.executor, e.executor AS executor
+FROM revisions r
+LEFT JOIN executors e ON e.revision_id = r.id
+WHERE r.id = ?
+ORDER BY e.id
 `
 
-func (q *Queries) ListExecutorsByDeployment(ctx context.Context, deploymentID int64) ([]Executor, error) {
-	rows, err := q.db.QueryContext(ctx, listExecutorsByDeployment, deploymentID)
+type GetRevisionWithExecutorsRow struct {
+	Revision Revision
+	Executor Executor
+}
+
+// Revision with executors
+func (q *Queries) GetRevisionWithExecutors(ctx context.Context, id int64) ([]GetRevisionWithExecutorsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getRevisionWithExecutors, id)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Executor
+	var items []GetRevisionWithExecutorsRow
 	for rows.Next() {
-		var i Executor
+		var i GetRevisionWithExecutorsRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.DeploymentID,
-			&i.ExecutorName,
-			&i.ContainerID,
+			&i.Revision.ID,
+			&i.Revision.PackageName,
+			&i.Revision.Version,
+			&i.Revision.DeployTime,
+			&i.Executor.ID,
+			&i.Executor.RevisionID,
+			&i.Executor.ExecutorName,
+			&i.Executor.AnchorName,
+			&i.Executor.ContainerID,
+			&i.Executor.ImgName,
 		); err != nil {
 			return nil, err
 		}
@@ -230,47 +181,139 @@ func (q *Queries) ListExecutorsByDeployment(ctx context.Context, deploymentID in
 	return items, nil
 }
 
-const updateDeployment = `-- name: UpdateDeployment :one
-UPDATE deployments
-SET pkg_name = ?, deployed_at = ?
-WHERE id = ?
-RETURNING id, pkg_name, deployed_at
+const listExecutorsByRevision = `-- name: ListExecutorsByRevision :many
+SELECT id, revision_id, executor_name, anchor_name, container_id, img_name
+FROM executors
+WHERE revision_id = ?
+ORDER BY id
 `
 
-type UpdateDeploymentParams struct {
-	PkgName    string
-	DeployedAt time.Time
-	ID         int64
+func (q *Queries) ListExecutorsByRevision(ctx context.Context, revisionID int64) ([]Executor, error) {
+	rows, err := q.db.QueryContext(ctx, listExecutorsByRevision, revisionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Executor
+	for rows.Next() {
+		var i Executor
+		if err := rows.Scan(
+			&i.ID,
+			&i.RevisionID,
+			&i.ExecutorName,
+			&i.AnchorName,
+			&i.ContainerID,
+			&i.ImgName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
-func (q *Queries) UpdateDeployment(ctx context.Context, arg UpdateDeploymentParams) (Deployment, error) {
-	row := q.db.QueryRowContext(ctx, updateDeployment, arg.PkgName, arg.DeployedAt, arg.ID)
-	var i Deployment
-	err := row.Scan(&i.ID, &i.PkgName, &i.DeployedAt)
-	return i, err
+const listRevisions = `-- name: ListRevisions :many
+SELECT id, package_name, version, deploy_time
+FROM revisions
+ORDER BY deploy_time DESC
+`
+
+func (q *Queries) ListRevisions(ctx context.Context) ([]Revision, error) {
+	rows, err := q.db.QueryContext(ctx, listRevisions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Revision
+	for rows.Next() {
+		var i Revision
+		if err := rows.Scan(
+			&i.ID,
+			&i.PackageName,
+			&i.Version,
+			&i.DeployTime,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateExecutor = `-- name: UpdateExecutor :one
 UPDATE executors
-SET executor_name = ?, container_id = ?
+SET executor_name = ?, anchor_name = ?, container_id = ?, img_name = ?
 WHERE id = ?
-RETURNING id, deployment_id, executor_name, container_id
+RETURNING id, revision_id, executor_name, anchor_name, container_id, img_name
 `
 
 type UpdateExecutorParams struct {
 	ExecutorName string
+	AnchorName   string
 	ContainerID  string
+	ImgName      string
 	ID           int64
 }
 
 func (q *Queries) UpdateExecutor(ctx context.Context, arg UpdateExecutorParams) (Executor, error) {
-	row := q.db.QueryRowContext(ctx, updateExecutor, arg.ExecutorName, arg.ContainerID, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateExecutor,
+		arg.ExecutorName,
+		arg.AnchorName,
+		arg.ContainerID,
+		arg.ImgName,
+		arg.ID,
+	)
 	var i Executor
 	err := row.Scan(
 		&i.ID,
-		&i.DeploymentID,
+		&i.RevisionID,
 		&i.ExecutorName,
+		&i.AnchorName,
 		&i.ContainerID,
+		&i.ImgName,
+	)
+	return i, err
+}
+
+const updateRevision = `-- name: UpdateRevision :one
+UPDATE revisions
+SET package_name = ?, version = ?, deploy_time = ?
+WHERE id = ?
+RETURNING id, package_name, version, deploy_time
+`
+
+type UpdateRevisionParams struct {
+	PackageName string
+	Version     string
+	DeployTime  time.Time
+	ID          int64
+}
+
+func (q *Queries) UpdateRevision(ctx context.Context, arg UpdateRevisionParams) (Revision, error) {
+	row := q.db.QueryRowContext(ctx, updateRevision,
+		arg.PackageName,
+		arg.Version,
+		arg.DeployTime,
+		arg.ID,
+	)
+	var i Revision
+	err := row.Scan(
+		&i.ID,
+		&i.PackageName,
+		&i.Version,
+		&i.DeployTime,
 	)
 	return i, err
 }

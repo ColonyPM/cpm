@@ -8,15 +8,18 @@ import (
 	"time"
 )
 
-type Deployment struct {
-	ID         int64
-	PkgName    string
-	DeployedAt time.Time
-}
-
 type Executor struct {
 	ID           int64
-	DeploymentID int64
+	RevisionID   int64
 	ExecutorName string
+	AnchorName   string
 	ContainerID  string
+	ImgName      string
+}
+
+type Revision struct {
+	ID          int64
+	PackageName string
+	Version     string
+	DeployTime  time.Time
 }

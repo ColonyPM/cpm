@@ -2,6 +2,7 @@ package deploycmd
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ColonyPM/cpm/internal/db"
@@ -22,6 +23,13 @@ const (
 )
 
 const MAX_EXEC_TIME = 30
+
+type SpawnedExecutor struct {
+	ExecutorName string
+	AnchorName   string
+	ContainerID  string
+	ImgName      string
+}
 
 func deploy(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Root().Context()
@@ -48,6 +56,8 @@ func deploy(cmd *cobra.Command, args []string) error {
 			anchors = append(anchors, e)
 		}
 	}
+
+	var spawnedExecutors []SpawnedExecutor
 
 	// 3. For each anchor, spawn the package's executors
 	for _, anchor := range anchors {
@@ -89,8 +99,17 @@ func deploy(cmd *cobra.Command, args []string) error {
 				if err != nil {
 					return err
 				}
+
 				s.Stop()
 				fmt.Printf(" → %s %s\n", greenOK, pkgExecutor.Image)
+
+				spawnedExecutors = append(spawnedExecutors, SpawnedExecutor{
+					ExecutorName: proc.Output[0].(string),
+					AnchorName:   anchor.Name,
+					ContainerID:  proc.Output[1].(string),
+					ImgName:      pkgExecutor.Image,
+				})
+
 			case err := <-pss.ErrChan:
 				s.Stop()
 				fmt.Printf("PSS Subscription error: %v\n", err)
@@ -101,17 +120,52 @@ func deploy(cmd *cobra.Command, args []string) error {
 				s.Stop()
 				fmt.Printf("PSF Subscription error: %v\n", err)
 			}
+
+			if err := pss.Close(); err != nil {
+				return err
+			}
+
+			if err := psf.Close(); err != nil {
+				return err
+			}
 		}
 	}
 
-	_, q := storectx.GetDb(ctx)
+	database, queries := storectx.GetDb(ctx)
 
-	_, err = q.CreateDeployment(ctx, db.CreateDeploymentParams{
-		PkgName:    args[0],
-		DeployedAt: time.Now().UTC(),
-	})
-
+	tx, err := database.BeginTx(ctx, nil)
 	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	qtx := queries.WithTx(tx)
+
+	pkgName, version, _ := strings.Cut(args[0], "@")
+
+	revision, err := qtx.CreateRevision(ctx, db.CreateRevisionParams{
+		PackageName: pkgName,
+		Version:     version,
+		DeployTime:  time.Now(),
+	})
+	if err != nil {
+		return err
+	}
+
+	for _, exec := range spawnedExecutors {
+		_, err := qtx.CreateExecutor(ctx, db.CreateExecutorParams{
+			RevisionID:   revision.ID,
+			ExecutorName: exec.ExecutorName,
+			AnchorName:   exec.AnchorName,
+			ContainerID:  exec.ContainerID,
+			ImgName:      exec.ImgName,
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
 		return err
 	}
 

@@ -1,65 +1,67 @@
--- Deployments CRUD
+-- Revisions CRUD
 
--- name: CreateDeployment :one
-INSERT INTO deployments (pkg_name, deployed_at)
-VALUES (?, ?)
-RETURNING id, pkg_name, deployed_at;
+-- name: CreateRevision :one
+INSERT INTO revisions (package_name, version, deploy_time)
+VALUES (?, ?, ?)
+RETURNING id, package_name, version, deploy_time;
 
--- name: GetDeployment :one
-SELECT id, pkg_name, deployed_at
-FROM deployments
+-- name: GetRevision :one
+SELECT id, package_name, version, deploy_time
+FROM revisions
 WHERE id = ?;
 
--- name: ListDeployments :many
-SELECT id, pkg_name, deployed_at
-FROM deployments
-ORDER BY deployed_at DESC;
+-- name: ListRevisions :many
+SELECT id, package_name, version, deploy_time
+FROM revisions
+ORDER BY deploy_time DESC;
 
--- name: UpdateDeployment :one
-UPDATE deployments
-SET pkg_name = ?, deployed_at = ?
+-- name: UpdateRevision :one
+UPDATE revisions
+SET package_name = ?, version = ?, deploy_time = ?
 WHERE id = ?
-RETURNING id, pkg_name, deployed_at;
+RETURNING id, package_name, version, deploy_time;
 
--- name: DeleteDeployment :exec
-DELETE FROM deployments
+-- name: DeleteRevision :exec
+DELETE FROM revisions
 WHERE id = ?;
+
 
 -- Executors CRUD
 
 -- name: CreateExecutor :one
-INSERT INTO executors (deployment_id, executor_name, container_id)
-VALUES (?, ?, ?)
-RETURNING id, deployment_id, executor_name, container_id;
+INSERT INTO executors (revision_id, executor_name, anchor_name, container_id, img_name)
+VALUES (?, ?, ?, ?, ?)
+RETURNING id, revision_id, executor_name, anchor_name, container_id, img_name;
 
 -- name: GetExecutor :one
-SELECT id, deployment_id, executor_name, container_id
+SELECT id, revision_id, executor_name, anchor_name, container_id, img_name
 FROM executors
 WHERE id = ?;
 
--- name: ListExecutorsByDeployment :many
-SELECT id, deployment_id, executor_name, container_id
+-- name: ListExecutorsByRevision :many
+SELECT id, revision_id, executor_name, anchor_name, container_id, img_name
 FROM executors
-WHERE deployment_id = ?
+WHERE revision_id = ?
 ORDER BY id;
 
 -- name: UpdateExecutor :one
 UPDATE executors
-SET executor_name = ?, container_id = ?
+SET executor_name = ?, anchor_name = ?, container_id = ?, img_name = ?
 WHERE id = ?
-RETURNING id, deployment_id, executor_name, container_id;
+RETURNING id, revision_id, executor_name, anchor_name, container_id, img_name;
 
 -- name: DeleteExecutor :exec
 DELETE FROM executors
 WHERE id = ?;
 
--- Deployment with executors (join)
 
--- name: GetDeploymentWithExecutors :many
+-- Revision with executors
+
+-- name: GetRevisionWithExecutors :many
 SELECT
-    sqlc.embed(d) AS deployment,
+    sqlc.embed(r) AS revision,
     sqlc.embed(e) AS executor
-FROM deployments d
-LEFT JOIN executors e ON e.deployment_id = d.id
-WHERE d.id = ?
+FROM revisions r
+LEFT JOIN executors e ON e.revision_id = r.id
+WHERE r.id = ?
 ORDER BY e.id;
