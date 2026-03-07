@@ -65,9 +65,9 @@ func NewDefaultManifest(pkgName string) Manifest {
 }
 
 func GetPackagesDir() string {
-	base, err := os.UserConfigDir()
+	base, err := os.UserCacheDir()
 	if err != nil {
-		panic("GetPackagesDir: UserConfigDir returned an error; this environment is unsupported")
+		panic("GetPackagesDir: UserCacheDir returned an error; this environment is unsupported")
 	}
 	return filepath.Join(base, "cpm", "packages")
 }
@@ -80,20 +80,32 @@ func EnsurePackagesDir() (string, error) {
 	return dir, nil
 }
 
-func GetPackageDirectory(pkgName string) (string, error) {
+func GetPackageDirectory(input string) (string, error) {
+	name, version, hasAt := strings.Cut(input, "@")
+
+	if !hasAt || version == "" {
+		return "", fmt.Errorf("please specify a version (e.g., %s@1.0.0)", name)
+	}
+
+	if strings.ToLower(version) == "latest" {
+		return "", fmt.Errorf("'latest' is not a valid version; please use a specific version number")
+	}
+
 	pkgsDir := GetPackagesDir()
-	pkgDir := filepath.Join(pkgsDir, pkgName)
+	pkgDir := filepath.Join(pkgsDir, name, version)
 
 	info, err := os.Stat(pkgDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return "", fmt.Errorf("package %q is not installed", pkgName)
+			return "", fmt.Errorf("package %q version %q is not installed", name, version)
 		}
 		return "", err
 	}
+
 	if !info.IsDir() {
-		return "", fmt.Errorf("%q is not a directory", pkgDir)
+		return "", fmt.Errorf("path %q exists but is not a directory", pkgDir)
 	}
+
 	return pkgDir, nil
 }
 

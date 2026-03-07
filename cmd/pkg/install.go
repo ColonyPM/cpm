@@ -18,7 +18,7 @@ import (
 )
 
 // /api/packages/{name}/download
-var baseURL = "https://colonypm.xxx/api/" 
+var baseURL = "https://colonypm.xyz/api/"
 var getPackagesDir = pkg.GetPackagesDir
 var newRestyClient = resty.New
 

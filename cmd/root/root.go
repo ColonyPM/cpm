@@ -37,23 +37,32 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
+		// build Colonies client from config
+		// Note: Colonies client uses "insecure" flag (true = HTTP, false = HTTPS)
+		// Our config uses "tls" flag (true = HTTPS, false = HTTP), so we invert it
+		cc := client.CreateColoniesClient(cfg.Server.Host, cfg.Server.Port, !cfg.Server.TLS, false)
+
 		// Use this ctx for db init as well
-		dbConn, err := store.OpenLocal(ctx)
+		dbConn, err := store.OpenDB(ctx, cc, cfg)
 		if err != nil {
 			return err
 		}
 		q := store.New(dbConn)
-
-		// build Colonies client from config
-		// Note: Colonies client uses "insecure" flag (true = HTTP, false = HTTPS)
-		// Our config uses "tls" flag (true = HTTPS, false = HTTP), so we invert it
-		cc := client.CreateColoniesClient(cfg.Colonies.Host, cfg.Colonies.Port, !cfg.Colonies.TLS, false)
 
 		// attach to ctx and set it back on the root
 		ctx = storectx.WithStore(ctx, dbConn, q, cc, cfg)
 		root.SetContext(ctx)
 
 		return nil
+	},
+	PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
+		root := cmd.Root()
+		ctx := root.Context()
+
+		cc := storectx.GetColoniesClient(ctx)
+		cfg := storectx.GetConfig(ctx)
+
+		return store.CloseDB(ctx, cc, cfg)
 	},
 }
 

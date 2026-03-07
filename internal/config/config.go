@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -42,21 +42,11 @@ type StorageConfig struct {
 
 // Path returns the path to the config file based on XDG_CONFIG_HOME or platform defaults.
 func Path() string {
-	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		return filepath.Join(xdg, "cpm", "config.yaml")
+	base, err := os.UserConfigDir()
+	if err != nil {
+		panic("GetPackagesDir: UserConfigDir returned an error; this environment is unsupported")
 	}
-
-	switch runtime.GOOS {
-	case "windows":
-		if appdata := os.Getenv("APPDATA"); appdata != "" {
-			return filepath.Join(appdata, "cpm", "config.yaml")
-		}
-		home, _ := os.UserHomeDir()
-		return filepath.Join(home, "AppData", "Roaming", "cpm", "config.yaml")
-	default:
-		home, _ := os.UserHomeDir()
-		return filepath.Join(home, ".config", "cpm", "config.yaml")
-	}
+	return filepath.Join(base, "cpm", "config.yaml")
 }
 
 // Load reads the config file and returns a validated Config.
@@ -87,7 +77,7 @@ func Load() (*Config, error) {
 func (c *Config) Validate() error {
 	//Server
 	if c.Server.Host == "" {
-	 	return fmt.Errorf("missing required config: server.host")
+		return fmt.Errorf("missing required config: server.host")
 	}
 	if c.Server.Port == 0 {
 		return fmt.Errorf("missing required config: server.port")

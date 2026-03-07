@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-
 func deployFunction(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Root().Context()
 	cc := storectx.GetColoniesClient(ctx)
@@ -17,7 +16,7 @@ func deployFunction(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if 	_, err := cc.Submit(fnSpec, cfg.Colonies.Prvkey); err != nil {
+	if _, err := cc.Submit(fnSpec, cfg.Server.Prvkey); err != nil {
 		return err
 	}
 	return nil
