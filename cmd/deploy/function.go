@@ -16,7 +16,7 @@ func deployFunction(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if _, err := cc.Submit(fnSpec, cfg.Server.Prvkey); err != nil {
+	if _, err := cc.Submit(fnSpec, cfg.User.Prvkey); err != nil {
 		return err
 	}
 	return nil
