@@ -39,8 +39,6 @@ func deploy(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	manifest.Deployments.Executors[1].Image = "RIP"
-
 	cpmConfig := storectx.GetConfig(ctx)
 	cc := storectx.GetColoniesClient(ctx)
 
