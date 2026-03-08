@@ -1,6 +1,8 @@
 package deploycmd
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -37,14 +39,23 @@ func deploy(cmd *cobra.Command, args []string) error {
 	cpmConfig := storectx.GetConfig(ctx)
 	cc := storectx.GetColoniesClient(ctx)
 
-	pkgName, version, _ := strings.Cut(args[0], "@")
-	res, err := queries.RevisionExistsByPackageAndVersion(ctx, db.RevisionExistsByPackageAndVersionParams{PackageName: pkgName, Version: version})
-	if err != nil {
-		return nil
+	pkgName, version, ok := strings.Cut(args[0], "@")
+	if !ok || pkgName == "" || version == "" {
+		return fmt.Errorf("package must be in the format name@version")
 	}
 
-	if res == 1 {
+	_, err := queries.GetRevisionByPackageAndVersion(
+		ctx,
+		db.GetRevisionByPackageAndVersionParams{
+			PackageName: pkgName,
+			Version:     version,
+		},
+	)
+	if err == nil {
 		return fmt.Errorf("%s has already been deployed", args[0])
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
 	}
 
 	manifest, err := pkg.GetPackageManifest(args[0])

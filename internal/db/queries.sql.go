@@ -130,6 +130,29 @@ func (q *Queries) GetRevision(ctx context.Context, id int64) (Revision, error) {
 	return i, err
 }
 
+const getRevisionByPackageAndVersion = `-- name: GetRevisionByPackageAndVersion :one
+SELECT id, package_name, version, deploy_time
+FROM revisions
+WHERE package_name = ? AND version = ?
+`
+
+type GetRevisionByPackageAndVersionParams struct {
+	PackageName string
+	Version     string
+}
+
+func (q *Queries) GetRevisionByPackageAndVersion(ctx context.Context, arg GetRevisionByPackageAndVersionParams) (Revision, error) {
+	row := q.db.QueryRowContext(ctx, getRevisionByPackageAndVersion, arg.PackageName, arg.Version)
+	var i Revision
+	err := row.Scan(
+		&i.ID,
+		&i.PackageName,
+		&i.Version,
+		&i.DeployTime,
+	)
+	return i, err
+}
+
 const getRevisionWithExecutors = `-- name: GetRevisionWithExecutors :many
 
 SELECT
@@ -156,6 +179,60 @@ func (q *Queries) GetRevisionWithExecutors(ctx context.Context, id int64) ([]Get
 	var items []GetRevisionWithExecutorsRow
 	for rows.Next() {
 		var i GetRevisionWithExecutorsRow
+		if err := rows.Scan(
+			&i.Revision.ID,
+			&i.Revision.PackageName,
+			&i.Revision.Version,
+			&i.Revision.DeployTime,
+			&i.Executor.ID,
+			&i.Executor.RevisionID,
+			&i.Executor.ExecutorName,
+			&i.Executor.AnchorName,
+			&i.Executor.ContainerID,
+			&i.Executor.ImgName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getRevisionWithExecutorsByPackageAndVersion = `-- name: GetRevisionWithExecutorsByPackageAndVersion :many
+SELECT
+    r.id, r.package_name, r.version, r.deploy_time,
+    e.id, e.revision_id, e.executor_name, e.anchor_name, e.container_id, e.img_name
+FROM revisions r
+LEFT JOIN executors e ON e.revision_id = r.id
+WHERE r.package_name = ? AND r.version = ?
+ORDER BY e.id
+`
+
+type GetRevisionWithExecutorsByPackageAndVersionParams struct {
+	PackageName string
+	Version     string
+}
+
+type GetRevisionWithExecutorsByPackageAndVersionRow struct {
+	Revision Revision
+	Executor Executor
+}
+
+func (q *Queries) GetRevisionWithExecutorsByPackageAndVersion(ctx context.Context, arg GetRevisionWithExecutorsByPackageAndVersionParams) ([]GetRevisionWithExecutorsByPackageAndVersionRow, error) {
+	rows, err := q.db.QueryContext(ctx, getRevisionWithExecutorsByPackageAndVersion, arg.PackageName, arg.Version)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetRevisionWithExecutorsByPackageAndVersionRow
+	for rows.Next() {
+		var i GetRevisionWithExecutorsByPackageAndVersionRow
 		if err := rows.Scan(
 			&i.Revision.ID,
 			&i.Revision.PackageName,
@@ -250,26 +327,6 @@ func (q *Queries) ListRevisions(ctx context.Context) ([]Revision, error) {
 		return nil, err
 	}
 	return items, nil
-}
-
-const revisionExistsByPackageAndVersion = `-- name: RevisionExistsByPackageAndVersion :one
-SELECT EXISTS (
-    SELECT 1
-    FROM revisions
-    WHERE package_name = ? AND version = ?
-) AS revision_exists
-`
-
-type RevisionExistsByPackageAndVersionParams struct {
-	PackageName string
-	Version     string
-}
-
-func (q *Queries) RevisionExistsByPackageAndVersion(ctx context.Context, arg RevisionExistsByPackageAndVersionParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, revisionExistsByPackageAndVersion, arg.PackageName, arg.Version)
-	var revision_exists int64
-	err := row.Scan(&revision_exists)
-	return revision_exists, err
 }
 
 const updateExecutor = `-- name: UpdateExecutor :one
