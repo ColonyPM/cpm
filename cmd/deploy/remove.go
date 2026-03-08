@@ -112,6 +112,16 @@ func remove(cmd *cobra.Command, args []string) error {
 		_ = psf.Close()
 	}
 
+	for _, exec := range executors {
+		if err := queries.DeleteExecutor(ctx, exec.ID); err != nil {
+			return err
+		}
+	}
+
+	if err := queries.DeleteRevision(ctx, revision.ID); err != nil {
+		return err
+	}
+
 	return nil
 }
 
