@@ -2,7 +2,8 @@ CREATE TABLE revisions (
     id           INTEGER PRIMARY KEY,
     package_name TEXT NOT NULL,
     version      TEXT NOT NULL,
-    deploy_time  DATETIME NOT NULL
+    deploy_time  DATETIME NOT NULL,
+    UNIQUE (package_name, version)
 );
 
 CREATE TABLE executors (

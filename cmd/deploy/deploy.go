@@ -33,14 +33,24 @@ type SpawnedExecutor struct {
 
 func deploy(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Root().Context()
+	database, queries := storectx.GetDb(ctx)
+	cpmConfig := storectx.GetConfig(ctx)
+	cc := storectx.GetColoniesClient(ctx)
+
+	pkgName, version, _ := strings.Cut(args[0], "@")
+	res, err := queries.RevisionExistsByPackageAndVersion(ctx, db.RevisionExistsByPackageAndVersionParams{PackageName: pkgName, Version: version})
+	if err != nil {
+		return nil
+	}
+
+	if res == 1 {
+		return fmt.Errorf("%s has already been deployed", args[0])
+	}
 
 	manifest, err := pkg.GetPackageManifest(args[0])
 	if err != nil {
 		return err
 	}
-
-	cpmConfig := storectx.GetConfig(ctx)
-	cc := storectx.GetColoniesClient(ctx)
 
 	allExecutors, err := cc.GetExecutors(cpmConfig.Colony.Name, cpmConfig.User.Prvkey)
 	if err != nil {
@@ -146,7 +156,7 @@ func deploy(cmd *cobra.Command, args []string) error {
 		}
 
 		if len(cleanupErrs) > 0 {
-			return fmt.Errorf(strings.Join(cleanupErrs, "; "))
+			return fmt.Errorf("%s", strings.Join(cleanupErrs, "; "))
 		}
 
 		return nil
@@ -271,8 +281,6 @@ func deploy(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	database, queries := storectx.GetDb(ctx)
-
 	tx, err := database.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -280,8 +288,6 @@ func deploy(cmd *cobra.Command, args []string) error {
 	defer tx.Rollback()
 
 	qtx := queries.WithTx(tx)
-
-	pkgName, version, _ := strings.Cut(args[0], "@")
 
 	revision, err := qtx.CreateRevision(ctx, db.CreateRevisionParams{
 		PackageName: pkgName,

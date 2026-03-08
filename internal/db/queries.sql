@@ -25,6 +25,13 @@ RETURNING id, package_name, version, deploy_time;
 DELETE FROM revisions
 WHERE id = ?;
 
+-- name: RevisionExistsByPackageAndVersion :one
+SELECT EXISTS (
+    SELECT 1
+    FROM revisions
+    WHERE package_name = ? AND version = ?
+) AS revision_exists;
+
 
 -- Executors CRUD
 
@@ -59,8 +66,8 @@ WHERE id = ?;
 
 -- name: GetRevisionWithExecutors :many
 SELECT
-    sqlc.embed(r) AS revision,
-    sqlc.embed(e) AS executor
+    sqlc.embed(r),
+    sqlc.embed(e)
 FROM revisions r
 LEFT JOIN executors e ON e.revision_id = r.id
 WHERE r.id = ?

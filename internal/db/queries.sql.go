@@ -133,8 +133,8 @@ func (q *Queries) GetRevision(ctx context.Context, id int64) (Revision, error) {
 const getRevisionWithExecutors = `-- name: GetRevisionWithExecutors :many
 
 SELECT
-    r.revision, r.revision, r.revision, r.revision AS revision,
-    e.executor, e.executor, e.executor, e.executor, e.executor, e.executor AS executor
+    r.id, r.package_name, r.version, r.deploy_time,
+    e.id, e.revision_id, e.executor_name, e.anchor_name, e.container_id, e.img_name
 FROM revisions r
 LEFT JOIN executors e ON e.revision_id = r.id
 WHERE r.id = ?
@@ -250,6 +250,26 @@ func (q *Queries) ListRevisions(ctx context.Context) ([]Revision, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const revisionExistsByPackageAndVersion = `-- name: RevisionExistsByPackageAndVersion :one
+SELECT EXISTS (
+    SELECT 1
+    FROM revisions
+    WHERE package_name = ? AND version = ?
+) AS revision_exists
+`
+
+type RevisionExistsByPackageAndVersionParams struct {
+	PackageName string
+	Version     string
+}
+
+func (q *Queries) RevisionExistsByPackageAndVersion(ctx context.Context, arg RevisionExistsByPackageAndVersionParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, revisionExistsByPackageAndVersion, arg.PackageName, arg.Version)
+	var revision_exists int64
+	err := row.Scan(&revision_exists)
+	return revision_exists, err
 }
 
 const updateExecutor = `-- name: UpdateExecutor :one
