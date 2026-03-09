@@ -2,6 +2,7 @@ package deploycmd
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"time"
@@ -71,7 +72,7 @@ func runList(cmd *cobra.Command, args []string, q deployQ) error {
 				revision.Version+rowSuffix,
 				executor.ExecutorName,
 				executor.AnchorName,
-				executor.ContainerID,
+				fmt.Sprintf("%.10s...", executor.ContainerID),
 				executor.ImgName,
 				revision.DeployTime.Format(time.RFC3339)+rowSuffix,
 			)
