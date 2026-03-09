@@ -5,16 +5,17 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ColonyPM/cpm/internal/pkg"
 	"github.com/spf13/cobra"
 )
 
+
+
 func listPackages(cmd *cobra.Command, args []string) error {
-	pkgsDir := pkg.GetPackagesDir()
+	pkgsDir := getPackagesDir() //using getPackagesDir = pkg.GetPackagesDir from install
 
 	entries, err := os.ReadDir(pkgsDir)
 	if err != nil {
-		return fmt.Errorf("reading packages directory: %v\n", err)
+		return fmt.Errorf("reading packages directory: %v", err)
 	}
 
 	for _, entry := range entries {
@@ -36,13 +37,13 @@ func listPackages(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		fmt.Println(pkgName)
+		cmd.Println(pkgName)
 		for i, version := range versions {
 			branch := "├─"
 			if i == len(versions)-1 {
 				branch = "└─"
 			}
-			fmt.Printf("  %s %s\n", branch, version)
+			cmd.Printf("  %s %s\n", branch, version)
 		}
 
 	}

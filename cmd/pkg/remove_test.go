@@ -24,7 +24,7 @@ func TestRemoveCmd(t *testing.T) {
 	
 
 	tempdir := t.TempDir()
-	GetPackages = func() string { return tempdir }
+	getPackagesDir = func() string { return tempdir }
 	testpkg := "testpkg"
 
 	require.NoError(t, os.MkdirAll(filepath.Join(tempdir,testpkg),0o755))
