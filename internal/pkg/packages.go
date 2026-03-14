@@ -64,6 +64,10 @@ func NewDefaultManifest(pkgName string) Manifest {
 	}
 }
 
+var getPackagesDir = GetPackagesDir
+var getPackageDirectory = GetPackageDirectory
+var convertJSONToFunctionSpec = core.ConvertJSONToFunctionSpec
+
 func GetPackagesDir() string {
 	base, err := os.UserCacheDir()
 	if err != nil {
@@ -73,7 +77,7 @@ func GetPackagesDir() string {
 }
 
 func EnsurePackagesDir() (string, error) {
-	dir := GetPackagesDir()
+	dir := getPackagesDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("creating packages directory %q: %w", dir, err)
 	}
@@ -91,7 +95,7 @@ func GetPackageDirectory(input string) (string, error) {
 		return "", fmt.Errorf("'latest' is not a valid version; please use a specific version number")
 	}
 
-	pkgsDir := GetPackagesDir()
+	pkgsDir := getPackagesDir()
 	pkgDir := filepath.Join(pkgsDir, name, version)
 
 	info, err := os.Stat(pkgDir)
@@ -110,7 +114,7 @@ func GetPackageDirectory(input string) (string, error) {
 }
 
 func GetPackageManifest(pkgName string) (*Manifest, error) {
-	pkgDir, err := GetPackageDirectory(pkgName)
+	pkgDir, err := getPackageDirectory(pkgName)
 	if err != nil {
 		return nil, err
 	}
@@ -134,8 +138,7 @@ func GetPackageManifest(pkgName string) (*Manifest, error) {
 	return m, nil
 }
 
-var getPackageDirectory = GetPackageDirectory
-var convertJSONToFunctionSpec = core.ConvertJSONToFunctionSpec
+
 
 func GetFunctionSpec(pkgName, fnSpecName string) (*core.FunctionSpec, error) {
 	// Re-use our validated getter.
@@ -186,15 +189,12 @@ func GetFunctionSpec(pkgName, fnSpecName string) (*core.FunctionSpec, error) {
 // In pkg/package.go (or similar)
 
 func GetValuesPath(pkgName string) (string, error) {
-	fileRootName, version, _ := strings.Cut(pkgName, "@")
-
-	pkgDir, err := GetPackageDirectory(fileRootName)
+	pkgDir, err := getPackageDirectory(pkgName)
 	if err != nil {
 		return "", err
 	}
-	pkgVersionDir := filepath.Join(pkgDir, version)
 
-	valuesPath := filepath.Join(pkgVersionDir, "values.yaml")
+	valuesPath := filepath.Join(pkgDir, "values.yaml")
 
 	info, err := os.Stat(valuesPath)
 	if err != nil {
