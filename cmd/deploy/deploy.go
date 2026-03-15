@@ -337,11 +337,9 @@ func NewDeployCmd() *cobra.Command {
 		RunE:  deploy,
 	}
 
-	cmd.AddCommand(newDeployGetCmd())
 	cmd.AddCommand(newDeployListCmd())
 	cmd.AddCommand(newDeployRemoveCmd())
 	cmd.AddCommand(newDeployFunctionCmd())
-	cmd.AddCommand(newDeployWorkflowCmd())
 
 	return cmd
 }
