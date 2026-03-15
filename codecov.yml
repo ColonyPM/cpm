@@ -5,4 +5,5 @@ ignore:
     - "main.go"
     - "cmd/root/**"
     - "internal/db/**"
+    - "internal/storectx/**"
     - "cmd/pkg/pkg.go"
