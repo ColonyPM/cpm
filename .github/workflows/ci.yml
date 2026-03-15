@@ -15,17 +15,21 @@ jobs:
         steps:
             - name: Checkout
               uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
 
             - name: Set up Go
               uses: actions/setup-go@v6
               with:
                   go-version: "1.25.4"
+                  cache: true
 
             - name: Build
               run: go build ./...
 
-            - name: Test with coverage
-              run: go test -covermode=atomic -coverprofile=coverage.out ./...
+            - name: Run tests with coverage and JSON report
+              run: |
+                  go test -v -covermode=atomic -coverprofile=coverage.out -json ./... > test-report.json
 
             - name: Create coverage summary
               if: always()
@@ -33,11 +37,6 @@ jobs:
                   if [ -f coverage.out ]; then
                     go tool cover -func=coverage.out | tee coverage-summary.txt
                   fi
-
-            - name: Generate JSON test report
-              if: always()
-              run: |
-                  go test -json ./... > test-report.json || true
 
             - name: Add workflow summary
               if: always()
