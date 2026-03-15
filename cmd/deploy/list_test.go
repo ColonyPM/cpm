@@ -1,128 +1,165 @@
 package deploycmd
 
-/*
-type mockDeployQ struct {
-	mock.Mock
+import (
+	"bytes"
+	"context"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/ColonyPM/cpm/internal/db"
+	"github.com/spf13/cobra"
+)
+
+type fakeDeployQ struct {
+	revisions      []db.Revision
+	revisionsErr   error
+	executorsByRev map[int64][]db.Executor
+	executorsErr   map[int64]error
+	calledIDs      []int64
 }
 
-func (m *mockDeployQ) ListDeployments(ctx context.Context) ([]db.Deployment, error) {
-	args := m.Called(ctx)
-	return args.Get(0).([]db.Deployment), args.Error(1)
+func (f *fakeDeployQ) ListRevisions(ctx context.Context) ([]db.Revision, error) {
+	if f.revisionsErr != nil {
+		return nil, f.revisionsErr
+	}
+	return f.revisions, nil
 }
 
-func (m *mockDeployQ) ListExecutorsByDeployment(ctx context.Context, deploymentID int64) ([]db.Executor, error) {
-	args := m.Called(ctx, deploymentID)
-	return args.Get(0).([]db.Executor), args.Error(1)
+func (f *fakeDeployQ) ListExecutorsByRevision(ctx context.Context, revisionID int64) ([]db.Executor, error) {
+	f.calledIDs = append(f.calledIDs, revisionID)
+
+	if err := f.executorsErr[revisionID]; err != nil {
+		return nil, err
+	}
+	return f.executorsByRev[revisionID], nil
 }
 
-func TestRunList_NoDeployment(t *testing.T){
-	ctx := context.Background()
-
-	var output bytes.Buffer
-	cmd := &cobra.Command{}
-	cmd.SetOut(&output)
+func newTestCmd(buf *bytes.Buffer) *cobra.Command {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
 	cmd.SetContext(context.Background())
-
-	test := new(mockDeployQ)
-
-	test.On("ListDeployments", ctx).Return([]db.Deployment{}, nil)
-
-
-	err := runList(cmd, nil, test)
-	require.NoError(t, err)
-
-	out := output.String()
-	assert.Contains(t, out, "Package")
-	assert.Contains(t, out, "Executors")
-	assert.Contains(t, out, "Created At")
-
-	test.AssertExpectations(t)
-
+	return cmd
 }
 
-func TestRunList_Deployment_NoExecutors(t *testing.T){
-	ctx := context.Background()
+func cleanTableOutput(s string) string {
+	return strings.ReplaceAll(s, zeroWidthSpace, "")
+}
 
-	var output bytes.Buffer
-	cmd := &cobra.Command{}
-	cmd.SetOut(&output)
-	cmd.SetContext(context.Background())
+func TestRunList_RendersRevisionsAndExecutors(t *testing.T) {
+	var out bytes.Buffer
+	cmd := newTestCmd(&out)
 
-	test := new(mockDeployQ)
+	deployTime := time.Date(2025, 1, 2, 3, 4, 5, 0, time.UTC)
 
-	deployments := []db.Deployment{
-		{ID: 1, PkgName: "mypkg", DeployedAt: time.Now()},
+	q := &fakeDeployQ{
+		revisions: []db.Revision{
+			{
+				ID:          1,
+				PackageName: "pkg-a",
+				Version:     "1.0.0",
+				DeployTime:  deployTime,
+			},
+			{
+				ID:          2,
+				PackageName: "pkg-b",
+				Version:     "2.0.0",
+				DeployTime:  deployTime,
+			},
+		},
+		executorsByRev: map[int64][]db.Executor{
+			1: {
+				{
+					ExecutorName: "exec-1",
+					AnchorName:   "anchor-1",
+					ContainerID:  "1234567890abcdef",
+					ImgName:      "img-1",
+				},
+			},
+			2: nil,
+		},
+		executorsErr: map[int64]error{},
 	}
 
-	test.On("ListDeployments", ctx).Return(deployments, nil)
-	test.On("ListExecutorsByDeployment", ctx, int64(1)).Return([]db.Executor{}, nil)
-
-
-	err := runList(cmd, nil, test)
-	require.NoError(t, err)
-
-	test.AssertExpectations(t)
-
-}
-
-func TestRunList_Deployment_WithExecutors(t *testing.T){
-	ctx := context.Background()
-
-	var output bytes.Buffer
-	cmd := &cobra.Command{}
-	cmd.SetOut(&output)
-	cmd.SetContext(context.Background())
-
-	test := new(mockDeployQ)
-
-	deployments := []db.Deployment{
-		{ID: 5, PkgName: "mypkg", DeployedAt: time.Now()},
+	err := runList(cmd, nil, q)
+	if err != nil {
+		t.Fatalf("runList returned error: %v", err)
 	}
 
-	executors := []db.Executor{
-		{ID: 1, DeploymentID: 5, 	ExecutorName: "executor1", ContainerID: "conatiner1"},
-		{ID: 2, DeploymentID: 5, 	ExecutorName: "executor2", ContainerID: "conatiner2"},
+	got := cleanTableOutput(out.String())
+
+	if !strings.Contains(got, "pkg-a") {
+		t.Fatalf("expected output to contain pkg-a, got:\n%s", got)
+	}
+	if !strings.Contains(got, "1.0.0") {
+		t.Fatalf("expected output to contain version 1.0.0, got:\n%s", got)
+	}
+	if !strings.Contains(got, "exec-1") {
+		t.Fatalf("expected output to contain executor name, got:\n%s", got)
+	}
+	if !strings.Contains(got, "anchor-1") {
+		t.Fatalf("expected output to contain anchor name, got:\n%s", got)
+	}
+	if !strings.Contains(got, "1234567890...") {
+		t.Fatalf("expected truncated container ID, got:\n%s", got)
+	}
+	if !strings.Contains(got, "img-1") {
+		t.Fatalf("expected image name, got:\n%s", got)
+	}
+	if !strings.Contains(got, deployTime.Format(time.RFC3339)) {
+		t.Fatalf("expected deploy time, got:\n%s", got)
+	}
+	if !strings.Contains(got, "No Executors") {
+		t.Fatalf("expected output to contain No Executors row, got:\n%s", got)
 	}
 
-	test.On("ListDeployments", ctx).Return(deployments, nil)
-	test.On("ListExecutorsByDeployment", ctx, int64(5)).Return(executors, nil)
-
-
-	err := runList(cmd, nil, test)
-	require.NoError(t, err)
-
-	out := output.String()
-	assert.Contains(t, out, "mypkg")
-	assert.Contains(t, out, "executor1")
-	assert.Contains(t, out, "executor2")
-	assert.Contains(t, out, "conatiner1")
-	assert.Contains(t, out, "conatiner2")
-	assert.Contains(t, out, time.Now().Format(time.RFC3339))
-
-	test.AssertExpectations(t)
-
+	if len(q.calledIDs) != 2 || q.calledIDs[0] != 1 || q.calledIDs[1] != 2 {
+		t.Fatalf("expected ListExecutorsByRevision called with [1 2], got %v", q.calledIDs)
+	}
 }
 
-func TestRunList_ListDeploymentsError(t *testing.T){
-	ctx := context.Background()
+func TestRunList_ListRevisionsError(t *testing.T) {
+	var out bytes.Buffer
+	cmd := newTestCmd(&out)
 
-	var output bytes.Buffer
-	cmd := &cobra.Command{}
-	cmd.SetOut(&output)
-	cmd.SetContext(context.Background())
+	wantErr := errors.New("db exploded")
+	q := &fakeDeployQ{
+		revisionsErr:   wantErr,
+		executorsByRev: map[int64][]db.Executor{},
+		executorsErr:   map[int64]error{},
+	}
 
-	test := new(mockDeployQ)
-	wantErr := errors.New("db down")
-
-	test.On("ListDeployments", ctx).Return([]db.Deployment{}, wantErr)
-
-
-	err := runList(cmd, nil, test)
-	require.ErrorIs(t, err, wantErr)
-
-	assert.Equal(t, "", output.String())
-
-	test.AssertExpectations(t)
+	err := runList(cmd, nil, q)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("expected %v, got %v", wantErr, err)
+	}
 }
 
-*/
+func TestRunList_ListExecutorsByRevisionError(t *testing.T) {
+	var out bytes.Buffer
+	cmd := newTestCmd(&out)
+
+	wantErr := errors.New("executor lookup failed")
+
+	q := &fakeDeployQ{
+		revisions: []db.Revision{
+			{
+				ID:          7,
+				PackageName: "pkg",
+				Version:     "1.2.3",
+				DeployTime:  time.Now(),
+			},
+		},
+		executorsByRev: map[int64][]db.Executor{},
+		executorsErr: map[int64]error{
+			7: wantErr,
+		},
+	}
+
+	err := runList(cmd, nil, q)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("expected %v, got %v", wantErr, err)
+	}
+}
