@@ -163,3 +163,14 @@ func TestRunList_ListExecutorsByRevisionError(t *testing.T) {
 		t.Fatalf("expected %v, got %v", wantErr, err)
 	}
 }
+
+func TestNewDeployListCmd(t *testing.T) {
+	cmd := newDeployListCmd()
+
+	if cmd.Use != "list" {
+		t.Fatalf("expected Use=list, got %q", cmd.Use)
+	}
+	if cmd.RunE == nil {
+		t.Fatal("expected RunE to be set")
+	}
+}
