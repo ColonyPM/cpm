@@ -130,7 +130,7 @@ func uploadPackage(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("upload failed (%d): %s", resp.StatusCode(), resp.String())
 	}
 
-	fmt.Println(resp.Result().(*uploadResponse).Url)
+	fmt.Fprintln(cmd.OutOrStdout(), resp.Result().(*uploadResponse).Url)
 
 	return nil
 }
