@@ -1,2 +1,8 @@
 fixes:
     - "github.com/ColonyPM/cpm/::"
+
+ignore:
+    - "main.go"
+    - "cmd/root/**"
+    - "internal/db/**"
+    - "cmd/pkg/pkg.go"
