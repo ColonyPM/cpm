@@ -1,315 +1,59 @@
 package deploycmd
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/ColonyPM/cpm/internal/db"
 	"github.com/ColonyPM/cpm/internal/pkg"
 	"github.com/ColonyPM/cpm/internal/storectx"
-	"github.com/briandowns/spinner"
 	"github.com/colonyos/colonies/pkg/core"
 	"github.com/spf13/cobra"
 )
 
-const (
-	green = "\x1b[32m"
-	red   = "\x1b[31m"
-	reset = "\x1b[0m"
-
-	greenOK = green + "✔" + reset
-	redX    = red + "❌" + reset
-)
-
 const MAX_EXEC_TIME = 30
 
-type SpawnedExecutor struct {
-	ExecutorName string
-	AnchorName   string
-	ContainerID  string
-	ImgName      string
+type sqlDeployRepo struct {
+	db      *sql.DB
+	queries *db.Queries
 }
 
-func deploy(cmd *cobra.Command, args []string) error {
-	ctx := cmd.Root().Context()
-	database, queries := storectx.GetDb(ctx)
-	cpmConfig := storectx.GetConfig(ctx)
-	cc := storectx.GetColoniesClient(ctx)
-
-	pkgName, version, ok := strings.Cut(args[0], "@")
-	if !ok || pkgName == "" || version == "" {
-		return fmt.Errorf("package must be in the format name@version")
-	}
-
-	_, err := queries.GetRevisionByPackageAndVersion(
-		ctx,
-		db.GetRevisionByPackageAndVersionParams{
-			PackageName: pkgName,
-			Version:     version,
-		},
-	)
+func (r sqlDeployRepo) RevisionExists(ctx context.Context, pkgName, version string) (bool, error) {
+	_, err := r.queries.GetRevisionByPackageAndVersion(ctx, db.GetRevisionByPackageAndVersionParams{
+		PackageName: pkgName,
+		Version:     version,
+	})
 	if err == nil {
-		return fmt.Errorf("%s has already been deployed", args[0])
+		return true, nil
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return err
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
 	}
+	return false, err
+}
 
-	manifest, err := pkg.GetPackageManifest(args[0])
-	if err != nil {
-		return err
-	}
-
-	allExecutors, err := cc.GetExecutors(cpmConfig.Colony.Name, cpmConfig.User.Prvkey)
-	if err != nil {
-		return err
-	}
-
-	var anchors []*core.Executor
-	for _, e := range allExecutors {
-		if e.Type == "cpm-anchor" && e.IsApproved() {
-			anchors = append(anchors, e)
-		}
-	}
-
-	var spawnedExecutors []SpawnedExecutor
-
-	cleanupSpawned := func() error {
-		if len(spawnedExecutors) == 0 {
-			return nil
-		}
-
-		fmt.Println("[-] Deployment failed, removing already spawned containers...")
-		var cleanupErrs []string
-
-		for i := len(spawnedExecutors) - 1; i >= 0; i-- {
-			spawned := spawnedExecutors[i]
-
-			s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
-			s.Prefix = " → "
-			s.Suffix = fmt.Sprintf(" removing %s", spawned.ContainerID)
-			s.Start()
-
-			proc, err := cc.Submit(&core.FunctionSpec{
-				FuncName:    "removeExecutor",
-				Args:        []any{spawned.ContainerID},
-				MaxExecTime: MAX_EXEC_TIME,
-				Conditions: core.Conditions{
-					ColonyName:    cpmConfig.Colony.Name,
-					ExecutorNames: []string{spawned.AnchorName},
-					ExecutorType:  "cpm-anchor",
-				},
-			}, cpmConfig.User.Prvkey)
-			if err != nil {
-				s.Stop()
-				fmt.Printf(" → %s failed to remove %s: %v\n", redX, spawned.ContainerID, err)
-				cleanupErrs = append(cleanupErrs, fmt.Sprintf("remove %s: submit failed: %v", spawned.ContainerID, err))
-				continue
-			}
-
-			pss, err := cc.SubscribeProcess(
-				cpmConfig.Colony.Name,
-				proc.ID,
-				"cpm-anchor",
-				core.SUCCESS,
-				MAX_EXEC_TIME,
-				cpmConfig.User.Prvkey,
-			)
-			if err != nil {
-				s.Stop()
-				fmt.Printf(" → %s failed to subscribe remove success for %s: %v\n", redX, spawned.ContainerID, err)
-				cleanupErrs = append(cleanupErrs, fmt.Sprintf("remove %s: success subscribe failed: %v", spawned.ContainerID, err))
-				continue
-			}
-
-			psf, err := cc.SubscribeProcess(
-				cpmConfig.Colony.Name,
-				proc.ID,
-				"cpm-anchor",
-				core.FAILED,
-				MAX_EXEC_TIME,
-				cpmConfig.User.Prvkey,
-			)
-			if err != nil {
-				_ = pss.Close()
-				s.Stop()
-				fmt.Printf(" → %s failed to subscribe remove failure for %s: %v\n", redX, spawned.ContainerID, err)
-				cleanupErrs = append(cleanupErrs, fmt.Sprintf("remove %s: failure subscribe failed: %v", spawned.ContainerID, err))
-				continue
-			}
-
-			select {
-			case <-pss.ProcessChan:
-				s.Stop()
-				fmt.Printf(" → %s removed %s\n", greenOK, spawned.ContainerID)
-
-			case err := <-pss.ErrChan:
-				s.Stop()
-				fmt.Printf(" → %s remove success subscription error for %s: %v\n", redX, spawned.ContainerID, err)
-				cleanupErrs = append(cleanupErrs, fmt.Sprintf("remove %s: success subscription error: %v", spawned.ContainerID, err))
-
-			case failedProc := <-psf.ProcessChan:
-				s.Stop()
-				fmt.Printf(" → %s remove failed for %s: %v\n", redX, spawned.ContainerID, failedProc.Errors)
-				cleanupErrs = append(cleanupErrs, fmt.Sprintf("remove %s: process failed: %v", spawned.ContainerID, failedProc.Errors))
-
-			case err := <-psf.ErrChan:
-				s.Stop()
-				fmt.Printf(" → %s remove failure subscription error for %s: %v\n", redX, spawned.ContainerID, err)
-				cleanupErrs = append(cleanupErrs, fmt.Sprintf("remove %s: failure subscription error: %v", spawned.ContainerID, err))
-			}
-
-			_ = pss.Close()
-			_ = psf.Close()
-		}
-
-		if len(cleanupErrs) > 0 {
-			return fmt.Errorf("%s", strings.Join(cleanupErrs, "; "))
-		}
-
-		return nil
-	}
-
-	failAndCleanup := func(cause error) error {
-		cleanupErr := cleanupSpawned()
-		if cleanupErr != nil {
-			return fmt.Errorf("%w (rollback failed: %v)", cause, cleanupErr)
-		}
-		return cause
-	}
-
-	for _, anchor := range anchors {
-		fmt.Printf("[+] Spawning executors on anchor '%s'\n", anchor.Name)
-
-		for _, pkgExecutor := range manifest.Deployments.Executors {
-			s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
-			s.Prefix = " → "
-			s.Suffix = fmt.Sprintf(" %s", pkgExecutor.Image)
-			s.Start()
-
-			proc, err := cc.Submit(&core.FunctionSpec{
-				FuncName:    "createExecutor",
-				Args:        []any{pkgExecutor.Image},
-				MaxExecTime: MAX_EXEC_TIME,
-				Conditions: core.Conditions{
-					ColonyName:    cpmConfig.Colony.Name,
-					ExecutorNames: []string{anchor.Name},
-					ExecutorType:  "cpm-anchor",
-				},
-			}, cpmConfig.User.Prvkey)
-			if err != nil {
-				s.Stop()
-				return failAndCleanup(fmt.Errorf("failed to submit createExecutor for %s on %s: %w", pkgExecutor.Image, anchor.Name, err))
-			}
-
-			pss, err := cc.SubscribeProcess(
-				cpmConfig.Colony.Name,
-				proc.ID,
-				"cpm-anchor",
-				core.SUCCESS,
-				MAX_EXEC_TIME,
-				cpmConfig.User.Prvkey,
-			)
-			if err != nil {
-				s.Stop()
-				return failAndCleanup(fmt.Errorf("failed to subscribe success for %s on %s: %w", pkgExecutor.Image, anchor.Name, err))
-			}
-
-			psf, err := cc.SubscribeProcess(
-				cpmConfig.Colony.Name,
-				proc.ID,
-				"cpm-anchor",
-				core.FAILED,
-				MAX_EXEC_TIME,
-				cpmConfig.User.Prvkey,
-			)
-			if err != nil {
-				_ = pss.Close()
-				s.Stop()
-				return failAndCleanup(fmt.Errorf("failed to subscribe failure for %s on %s: %w", pkgExecutor.Image, anchor.Name, err))
-			}
-
-			select {
-			case procUpdate := <-pss.ProcessChan:
-				procInfo, err := cc.GetProcess(procUpdate.ID, cpmConfig.User.Prvkey)
-				if err != nil {
-					_ = pss.Close()
-					_ = psf.Close()
-					s.Stop()
-					return failAndCleanup(fmt.Errorf("failed to fetch process output for %s on %s: %w", pkgExecutor.Image, anchor.Name, err))
-				}
-
-				if len(procInfo.Output) < 2 {
-					_ = pss.Close()
-					_ = psf.Close()
-					s.Stop()
-					return failAndCleanup(fmt.Errorf("createExecutor returned invalid output for %s on %s", pkgExecutor.Image, anchor.Name))
-				}
-
-				executorName, ok1 := procInfo.Output[0].(string)
-				containerID, ok2 := procInfo.Output[1].(string)
-				if !ok1 || !ok2 {
-					_ = pss.Close()
-					_ = psf.Close()
-					s.Stop()
-					return failAndCleanup(fmt.Errorf("createExecutor returned unexpected output types for %s on %s", pkgExecutor.Image, anchor.Name))
-				}
-
-				s.Stop()
-				fmt.Printf(" → %s %s\n", greenOK, pkgExecutor.Image)
-
-				spawnedExecutors = append(spawnedExecutors, SpawnedExecutor{
-					ExecutorName: executorName,
-					AnchorName:   anchor.Name,
-					ContainerID:  containerID,
-					ImgName:      pkgExecutor.Image,
-				})
-
-			case err := <-pss.ErrChan:
-				_ = pss.Close()
-				_ = psf.Close()
-				s.Stop()
-				return failAndCleanup(fmt.Errorf("success subscription error for %s on %s: %w", pkgExecutor.Image, anchor.Name, err))
-
-			case failedProc := <-psf.ProcessChan:
-				_ = pss.Close()
-				_ = psf.Close()
-				s.Stop()
-				return failAndCleanup(fmt.Errorf("createExecutor failed for %s on %s: %v", pkgExecutor.Image, anchor.Name, failedProc.Errors[0]))
-
-			case err := <-psf.ErrChan:
-				_ = pss.Close()
-				_ = psf.Close()
-				s.Stop()
-				return failAndCleanup(fmt.Errorf("failure subscription error for %s on %s: %w", pkgExecutor.Image, anchor.Name, err))
-			}
-
-			_ = pss.Close()
-			_ = psf.Close()
-		}
-	}
-
-	tx, err := database.BeginTx(ctx, nil)
+func (r sqlDeployRepo) SaveDeployment(ctx context.Context, pkgName, version string, deployedAt time.Time, executors []SpawnedExecutor) error {
+	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 
-	qtx := queries.WithTx(tx)
+	qtx := r.queries.WithTx(tx)
 
 	revision, err := qtx.CreateRevision(ctx, db.CreateRevisionParams{
 		PackageName: pkgName,
 		Version:     version,
-		DeployTime:  time.Now(),
+		DeployTime:  deployedAt,
 	})
 	if err != nil {
 		return err
 	}
 
-	for _, exec := range spawnedExecutors {
+	for _, exec := range executors {
 		_, err := qtx.CreateExecutor(ctx, db.CreateExecutorParams{
 			RevisionID:   revision.ID,
 			ExecutorName: exec.ExecutorName,
@@ -322,11 +66,206 @@ func deploy(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
-		return err
+	return tx.Commit()
+}
+
+type runtimeFuncs struct {
+	approvedAnchors func(ctx context.Context) ([]string, error)
+	createExecutor  func(ctx context.Context, anchorName, image string) (SpawnedExecutor, error)
+	removeExecutor  func(ctx context.Context, anchorName, containerID string) error
+}
+
+func (r runtimeFuncs) ApprovedAnchors(ctx context.Context) ([]string, error) {
+	return r.approvedAnchors(ctx)
+}
+
+func (r runtimeFuncs) CreateExecutor(ctx context.Context, anchorName, image string) (SpawnedExecutor, error) {
+	return r.createExecutor(ctx, anchorName, image)
+}
+
+func (r runtimeFuncs) RemoveExecutor(ctx context.Context, anchorName, containerID string) error {
+	return r.removeExecutor(ctx, anchorName, containerID)
+}
+
+func deploy(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Root().Context()
+
+	database, queries := storectx.GetDb(ctx)
+	cfg := storectx.GetConfig(ctx)
+	cc := storectx.GetColoniesClient(ctx)
+
+	loadExecutorImages := func(ref string) ([]string, error) {
+		manifest, err := pkg.GetPackageManifest(ref)
+		if err != nil {
+			return nil, err
+		}
+
+		images := make([]string, 0, len(manifest.Deployments.Executors))
+		for _, exec := range manifest.Deployments.Executors {
+			images = append(images, exec.Image)
+		}
+		return images, nil
 	}
 
-	return nil
+	runtime := runtimeFuncs{
+		approvedAnchors: func(ctx context.Context) ([]string, error) {
+			allExecutors, err := cc.GetExecutors(cfg.Colony.Name, cfg.User.Prvkey)
+			if err != nil {
+				return nil, err
+			}
+
+			anchors := make([]string, 0)
+			for _, e := range allExecutors {
+				if e.Type == "cpm-anchor" && e.IsApproved() {
+					anchors = append(anchors, e.Name)
+				}
+			}
+
+			return anchors, nil
+		},
+
+		createExecutor: func(ctx context.Context, anchorName, image string) (SpawnedExecutor, error) {
+			proc, err := cc.Submit(&core.FunctionSpec{
+				FuncName:    "createExecutor",
+				Args:        []any{image},
+				MaxExecTime: MAX_EXEC_TIME,
+				Conditions: core.Conditions{
+					ColonyName:    cfg.Colony.Name,
+					ExecutorNames: []string{anchorName},
+					ExecutorType:  "cpm-anchor",
+				},
+			}, cfg.User.Prvkey)
+			if err != nil {
+				return SpawnedExecutor{}, fmt.Errorf("failed to submit createExecutor for %s on %s: %w", image, anchorName, err)
+			}
+
+			pss, err := cc.SubscribeProcess(
+				cfg.Colony.Name,
+				proc.ID,
+				"cpm-anchor",
+				core.SUCCESS,
+				MAX_EXEC_TIME,
+				cfg.User.Prvkey,
+			)
+			if err != nil {
+				return SpawnedExecutor{}, fmt.Errorf("failed to subscribe success for %s on %s: %w", image, anchorName, err)
+			}
+			defer pss.Close()
+
+			psf, err := cc.SubscribeProcess(
+				cfg.Colony.Name,
+				proc.ID,
+				"cpm-anchor",
+				core.FAILED,
+				MAX_EXEC_TIME,
+				cfg.User.Prvkey,
+			)
+			if err != nil {
+				return SpawnedExecutor{}, fmt.Errorf("failed to subscribe failure for %s on %s: %w", image, anchorName, err)
+			}
+			defer psf.Close()
+
+			select {
+			case procUpdate := <-pss.ProcessChan:
+				procInfo, err := cc.GetProcess(procUpdate.ID, cfg.User.Prvkey)
+				if err != nil {
+					return SpawnedExecutor{}, fmt.Errorf("failed to fetch process output for %s on %s: %w", image, anchorName, err)
+				}
+
+				if len(procInfo.Output) < 2 {
+					return SpawnedExecutor{}, fmt.Errorf("createExecutor returned invalid output for %s on %s", image, anchorName)
+				}
+
+				executorName, ok1 := procInfo.Output[0].(string)
+				containerID, ok2 := procInfo.Output[1].(string)
+				if !ok1 || !ok2 {
+					return SpawnedExecutor{}, fmt.Errorf("createExecutor returned unexpected output types for %s on %s", image, anchorName)
+				}
+
+				return SpawnedExecutor{
+					ExecutorName: executorName,
+					AnchorName:   anchorName,
+					ContainerID:  containerID,
+					ImgName:      image,
+				}, nil
+
+			case err := <-pss.ErrChan:
+				return SpawnedExecutor{}, fmt.Errorf("success subscription error for %s on %s: %w", image, anchorName, err)
+
+			case failedProc := <-psf.ProcessChan:
+				return SpawnedExecutor{}, fmt.Errorf("createExecutor failed for %s on %s: %v", image, anchorName, failedProc.Errors)
+
+			case err := <-psf.ErrChan:
+				return SpawnedExecutor{}, fmt.Errorf("failure subscription error for %s on %s: %w", image, anchorName, err)
+			}
+		},
+
+		removeExecutor: func(ctx context.Context, anchorName, containerID string) error {
+			proc, err := cc.Submit(&core.FunctionSpec{
+				FuncName:    "removeExecutor",
+				Args:        []any{containerID},
+				MaxExecTime: MAX_EXEC_TIME,
+				Conditions: core.Conditions{
+					ColonyName:    cfg.Colony.Name,
+					ExecutorNames: []string{anchorName},
+					ExecutorType:  "cpm-anchor",
+				},
+			}, cfg.User.Prvkey)
+			if err != nil {
+				return fmt.Errorf("submit failed: %w", err)
+			}
+
+			pss, err := cc.SubscribeProcess(
+				cfg.Colony.Name,
+				proc.ID,
+				"cpm-anchor",
+				core.SUCCESS,
+				MAX_EXEC_TIME,
+				cfg.User.Prvkey,
+			)
+			if err != nil {
+				return fmt.Errorf("success subscribe failed: %w", err)
+			}
+			defer pss.Close()
+
+			psf, err := cc.SubscribeProcess(
+				cfg.Colony.Name,
+				proc.ID,
+				"cpm-anchor",
+				core.FAILED,
+				MAX_EXEC_TIME,
+				cfg.User.Prvkey,
+			)
+			if err != nil {
+				return fmt.Errorf("failure subscribe failed: %w", err)
+			}
+			defer psf.Close()
+
+			select {
+			case <-pss.ProcessChan:
+				return nil
+
+			case err := <-pss.ErrChan:
+				return fmt.Errorf("success subscription error: %w", err)
+
+			case failedProc := <-psf.ProcessChan:
+				return fmt.Errorf("process failed: %v", failedProc.Errors)
+
+			case err := <-psf.ErrChan:
+				return fmt.Errorf("failure subscription error: %w", err)
+			}
+		},
+	}
+
+	svc := &deployer{
+		repo:               sqlDeployRepo{db: database, queries: queries},
+		runtime:            runtime,
+		loadExecutorImages: loadExecutorImages,
+		now:                time.Now,
+		out:                cmd.OutOrStdout(),
+	}
+
+	return svc.Deploy(ctx, args[0])
 }
 
 func NewDeployCmd() *cobra.Command {
