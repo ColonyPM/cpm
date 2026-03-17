@@ -64,7 +64,7 @@ cpm pkg download pingpong@latest
 ```
 To deploy:
 ```bash
-cpm pkg download pingpong@latest
+cpm deploy pingpong@latest
 ```
 Done! If you wish to see the executors in action run:
 ```bash
